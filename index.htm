@@ -16,22 +16,25 @@
   </style>
 </head>
 <body>
-  <div id="root"></div>
+ <div id="root"></div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <script type="text/babel" data-presets="react">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase/2.43.4/supabase.js"></script>
-const { useState, useMemo, useEffect, useRef, useCallback } = React;
-// ── Supabase 初始化 ──────────────────────────────────────────────────────────
-const SUPABASE_URL = "你的_SUPABASE_PROJECT_URL";
-const SUPABASE_ANON_KEY = "你的_SUPABASE_ANON_PUBLIC_KEY";
 
-// 注意：用 CDN 引入時，全域變數名稱是大寫的 supabase
-const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  
-// ── Default Data ─────────────────────────────────────────────────────────────
-const DEFAULT_ZONES = [
+  <script type="text/babel" data-presets="react">
+
+    const { useState, useMemo, useEffect, useRef, useCallback } = React;
+
+    // ── Supabase 初始化 ──────────────────────────────────────────────────────────
+    // 💡 修正點：網址結尾拿掉了 /rest/v1/
+    const SUPABASE_URL = "https://hbtmjkhwhfzrgbniwjii.supabase.co"; 
+    const SUPABASE_ANON_KEY = "sb_publishable_npjTrt3G0iTqParkpGNqIA_D3_u0li3";
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // ── Default Data ─────────────────────────────────────────────────────────────
+    const DEFAULT_ZONES = [
   { id: "A", name: "A 區" },
   { id: "B", name: "B 區" },
   { id: "C", name: "C 區" },
