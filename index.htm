@@ -327,6 +327,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "apikey": SUPABASE_KEY,
         "Authorization": `Bearer ${curSession.access_token}`,
       },
       body: JSON.stringify(payload),
