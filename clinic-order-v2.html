@@ -25,12 +25,12 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script type="text/babel" data-presets="react">
 const { useState, useMemo, useEffect, useRef, useCallback } = React;
- 
+
 // ── Supabase Config ───────────────────────────────────────────────────────────
 const SUPABASE_URL = "https://hbtmjkhwhfzrgbniwjii.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhidG1qa2h3aGZ6cmdibml3amlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2Mzg3NjUsImV4cCI6MjA5NzIxNDc2NX0.FpGs-EBTmA-pE9At3PPkDMsk6n82d6d7nMda68WpHjw";
 const TABLE = "warehouse_data";
- 
+
 if (!window.supabase || !window.supabase.createClient) {
   document.getElementById("root").innerHTML =
     '<div style="padding:40px 24px;text-align:center;font-family:sans-serif;color:#7c512e;">' +
@@ -40,22 +40,22 @@ if (!window.supabase || !window.supabase.createClient) {
     '</div>';
   throw new Error("Supabase SDK failed to load from CDN");
 }
- 
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
- 
+
 const sbHeaders = {
   "apikey": SUPABASE_KEY,
   "Content-Type": "application/json",
   "Prefer": "return=minimal",
 };
- 
+
 // 取得目前登入者的 access token（REST 直連需要帶這個才能符合 RLS）
 async function getAuthHeader() {
   const { data } = await sb.auth.getSession();
   const token = data?.session?.access_token || SUPABASE_KEY;
   return { ...sbHeaders, "Authorization": `Bearer ${token}` };
 }
- 
+
 // 從 Supabase 讀取一個 key 的 value
 async function sbGet(key) {
   try {
@@ -68,7 +68,7 @@ async function sbGet(key) {
     return data.length > 0 ? data[0].value : null;
   } catch { return null; }
 }
- 
+
 // 寫入或更新一個 key
 async function sbSet(key, value) {
   try {
@@ -81,7 +81,7 @@ async function sbSet(key, value) {
     return res.ok;
   } catch { return false; }
 }
- 
+
 // ── Default Data ─────────────────────────────────────────────────────────────
 const DEFAULT_ZONES = [
   { id: "A", name: "A 區" },
@@ -90,7 +90,7 @@ const DEFAULT_ZONES = [
   { id: "D", name: "D 區" },
   { id: "E", name: "E 區" },
 ];
- 
+
 const DEFAULT_PRODUCTS = [
   { id: 1, name: "處方單", unit: "箱", note: "", zone: "A", order: 1 },
   { id: 2, name: "掛號單", unit: "箱", note: "", zone: "A", order: 2 },
@@ -174,13 +174,13 @@ const DEFAULT_PRODUCTS = [
   { id: 80, name: "韓式美顏針（綠）", unit: "盒", note: "", zone: "E", order: 14 },
   { id: 81, name: "韓式美顏針（藍）", unit: "盒", note: "", zone: "E", order: 15 },
 ];
- 
+
 const QTY_OPTIONS = [0, ...Array.from({length: 50}, (_, i) => i + 1)];
- 
+
 const SK_PRODUCTS = "clinic_products_v3";
 const SK_ORDERS   = "clinic_orders_v3";
 const SK_ZONES    = "clinic_zones_v3";
- 
+
 // ── Local fallback helpers ────────────────────────────────────────────────────
 function localLoad(key, fb) {
   try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fb; } catch { return fb; }
@@ -188,7 +188,7 @@ function localLoad(key, fb) {
 function localSave(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
- 
+
 function copyTextToClipboard(text) {
   const ta = document.createElement("textarea");
   ta.value = text;
@@ -204,7 +204,7 @@ function copyTextToClipboard(text) {
   if (!ok && navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
   return ok;
 }
- 
+
 // ── Colours ──────────────────────────────────────────────────────────────────
 const C = {
   bg: "#f3ebe2", surface: "#e8e0d6", border: "#c4b8aa",
@@ -214,7 +214,7 @@ const C = {
   selected: "#b8c4b2", rowA: "#ddd0c0", rowB: "#939c89",
   cloud: "#4a90d9",
 };
- 
+
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const IcoSearch   = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>;
 const IcoPlus     = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
@@ -236,7 +236,7 @@ const IcoLogout   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="
 const IcoRefresh  = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
 const IcoLock     = () => <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
 const IcoChart    = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
- 
+
 const inputStyle = {
   width: "100%", boxSizing: "border-box",
   border: `1.5px solid ${C.border}`, borderRadius: 10,
@@ -248,15 +248,15 @@ const btnPrimary = {
   borderRadius: 12, padding: "13px 0",
   fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%",
 };
- 
+
 const BRANCHES = ["內湖", "士林", "大直"];
- 
+
 function genOrderId(existingOrders, branch, month) {
   const label = `${month}月`;
   const samebranchMonth = existingOrders.filter(o => o.branch === branch && o.monthLabel === label);
   return samebranchMonth.length === 0 ? `${branch} ${label}叫貨` : `${branch} ${label}追加`;
 }
- 
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function Modal({ title, onClose, children }) {
   return (
@@ -271,7 +271,7 @@ function Modal({ title, onClose, children }) {
     </div>
   );
 }
- 
+
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, []);
@@ -279,7 +279,7 @@ function Toast({ msg, onDone }) {
     <div style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)", background:C.text, color:"#fff", padding:"10px 22px", borderRadius:24, fontSize:14, fontWeight:600, zIndex:300, boxShadow:"0 4px 16px rgba(0,0,0,0.2)", whiteSpace:"nowrap" }}>{msg}</div>
   );
 }
- 
+
 // ── Sync Status Badge ─────────────────────────────────────────────────────────
 function SyncBadge({ status, onRefresh }) {
   // status: 'syncing' | 'synced' | 'error' | 'offline'
@@ -297,12 +297,12 @@ function SyncBadge({ status, onRefresh }) {
     </button>
   );
 }
- 
+
 // ════════════════════════════════════════════════════════════════════════════
 // ── PROFILE MODAL（個人資料／成員管理）────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 const EDGE_FN_URL = `${SUPABASE_URL}/functions/v1/admin-reset-password`;
- 
+
 function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, setToast }) {
   const [view, setView] = useState("profile"); // profile | members
   const [fullName, setFullName] = useState(myName);
@@ -314,12 +314,12 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
- 
+
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [resetTarget, setResetTarget] = useState(null);
   const [resetBusy, setResetBusy] = useState(false);
- 
+
   // 統一呼叫 Edge Function 的小工具
   async function callAdminFn(payload) {
     const { data, error } = await sb.functions.invoke("admin-reset-password", {
@@ -340,7 +340,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     if (data?.error) throw new Error(data.error);
     return data;
   }
- 
+
   async function loadMembers() {
     setMembersLoading(true);
     try {
@@ -366,11 +366,11 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     }
     setMembersLoading(false);
   }
- 
+
   useEffect(() => {
     if (view === "members") loadMembers();
   }, [view]);
- 
+
   async function saveProfile() {
     setErr(""); setMsg("");
     if (!fullName.trim()) { setErr("姓名不可為空"); return; }
@@ -384,7 +384,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     setMsg("已更新！");
     onUpdated({ full_name: fullName.trim(), branch });
   }
- 
+
   async function saveEmail() {
     setErr(""); setMsg("");
     if (!email.trim() || email.trim() === session.user.email) { setErr("請輸入新的 Email"); return; }
@@ -397,7 +397,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     if (error) { setErr(error.message); return; }
     setMsg("驗證信已寄出，請至新信箱完成驗證後 Email 才會更新。");
   }
- 
+
   async function savePassword() {
     setErr(""); setMsg("");
     if (!currentPwd) { setErr("請輸入目前密碼"); return; }
@@ -416,7 +416,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     setMsg("密碼已更新！");
     setCurrentPwd(""); setNewPwd("");
   }
- 
+
   async function handleResetMemberPassword(member) {
     setResetBusy(true);
     try {
@@ -428,7 +428,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     setResetBusy(false);
     setResetTarget(null);
   }
- 
+
   async function updateMemberBranch(memberId, newBranch) {
     // 先樂觀更新畫面，失敗再復原，介面反應比較快
     const prevMembers = members;
@@ -441,7 +441,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
       setToast(e.message || "分院更新失敗");
     }
   }
- 
+
   return (
     <Modal title={view === "members" ? "成員管理" : "個人資料"} onClose={onClose}>
       {isAdmin && (
@@ -456,7 +456,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
           </button>
         </div>
       )}
- 
+
       {view === "profile" && (
         <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
           <div>
@@ -476,17 +476,17 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
             </div>
           </div>
           <button onClick={saveProfile} disabled={busy} style={{ ...btnPrimary, background:C.addBtn, opacity: busy ? 0.6 : 1 }}>{busy ? "儲存中…" : "儲存姓名與分院"}</button>
- 
+
           <div style={{ height:1, background:C.border, margin:"4px 0" }} />
- 
+
           <div>
             <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>Email</div>
             <input style={inputStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} />
           </div>
           <button onClick={saveEmail} disabled={busy} style={{ ...btnPrimary, background:C.accent, opacity: busy ? 0.6 : 1 }}>{busy ? "處理中…" : "更新 Email（需驗證）"}</button>
- 
+
           <div style={{ height:1, background:C.border, margin:"4px 0" }} />
- 
+
           <div>
             <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>密碼</div>
             {!showPwd ? (
@@ -504,12 +504,12 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
               </div>
             )}
           </div>
- 
+
           {err && <div style={{ color:C.danger, fontSize:13, fontWeight:600 }}>{err}</div>}
           {msg && <div style={{ color:C.addBtn, fontSize:13, fontWeight:600 }}>{msg}</div>}
         </div>
       )}
- 
+
       {view === "members" && isAdmin && (
         <div>
           {membersLoading && <div style={{ textAlign:"center", color:C.sub, padding:"20px 0" }}>載入中…</div>}
@@ -540,7 +540,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
           )}
         </div>
       )}
- 
+
       {resetTarget && (
         <div style={{ position:"fixed", inset:0, zIndex:250, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }} onClick={() => setResetTarget(null)}>
           <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:16, padding:"22px 20px", width:"100%", maxWidth:320 }}>
@@ -557,7 +557,7 @@ function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, 
     </Modal>
   );
 }
- 
+
 // ════════════════════════════════════════════════════════════════════════════
 // ── FORCE CHANGE PASSWORD SCREEN（被管理員重設密碼後強制改密碼）─────────────
 // ════════════════════════════════════════════════════════════════════════════
@@ -565,7 +565,7 @@ function ForceChangePasswordScreen({ onDone }) {
   const [newPwd, setNewPwd] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
- 
+
   async function handleSubmit() {
     setErr("");
     if (!newPwd || newPwd.length < 6) { setErr("密碼至少需要 6 個字元"); return; }
@@ -579,7 +579,7 @@ function ForceChangePasswordScreen({ onDone }) {
     if (flagErr) { setErr(flagErr.message); return; }
     onDone();
   }
- 
+
   return (
     <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.bg, padding:"24px" }}>
       <div style={{ fontSize:36, marginBottom:10 }}>🔑</div>
@@ -597,7 +597,7 @@ function ForceChangePasswordScreen({ onDone }) {
     </div>
   );
 }
- 
+
 // ════════════════════════════════════════════════════════════════════════════
 // ── AUTH SCREEN ───────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
@@ -610,7 +610,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
- 
+
   // 偵測網址是否帶有 Supabase 重設密碼的 recovery 參數
   // （使用者點擊重設密碼信件裡的連結後，會被導回網站並帶這個參數）
   useEffect(() => {
@@ -625,7 +625,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
     });
     return () => sub.data.subscription.unsubscribe();
   }, []);
- 
+
   async function handleLogin() {
     setErr(""); setMsg("");
     if (!email.trim() || !password) { setErr("請輸入帳號與密碼"); return; }
@@ -635,7 +635,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
     if (error) { setErr(error.message === "Invalid login credentials" ? "帳號或密碼錯誤" : error.message); return; }
     onAuthed(data.session);
   }
- 
+
   async function handleSignup() {
     setErr(""); setMsg("");
     if (!fullName.trim()) { setErr("請輸入姓名"); return; }
@@ -661,7 +661,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
       setMode("login");
     }
   }
- 
+
   async function handleReset() {
     setErr(""); setMsg("");
     if (!email.trim()) { setErr("請輸入您的 email"); return; }
@@ -673,7 +673,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
     if (error) { setErr(error.message); return; }
     setMsg("重設密碼信件已寄出，請check您的 email。");
   }
- 
+
   async function handleSetNewPassword() {
     setErr(""); setMsg("");
     if (!newPassword || newPassword.length < 6) { setErr("密碼至少需要 6 個字元"); return; }
@@ -694,14 +694,14 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
       else { setMode("login"); }
     }, 1200);
   }
- 
+
   return (
     <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.bg, padding:"24px" }}>
       <img src="https://www.jinhetcm.com.tw/images/_tw/logo.png" alt="錦禾中醫" style={{ height:56, marginBottom:10, objectFit:"contain" }} />
       <div style={{ fontWeight:800, fontSize:21, color:C.header, marginBottom:28 }}>錦禾倉庫叫貨</div>
- 
+
       <div style={{ width:"100%", maxWidth:340, background:C.surface, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}` }}>
- 
+
         {mode === "recovery" ? (
           <>
             <div style={{ textAlign:"center", fontWeight:700, fontSize:19, color:C.text, marginBottom:18 }}>設定新密碼</div>
@@ -724,7 +724,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
                 {mode === "signup" ? "註冊新帳號" : "重設密碼"}
               </div>
             )}
- 
+
             <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
               {mode === "signup" && (
                 <div>
@@ -744,10 +744,10 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
                     onKeyDown={e => { if (e.key === "Enter") (mode === "login" ? handleLogin() : handleSignup()); }} />
                 </div>
               )}
- 
+
               {err && <div style={{ color:C.danger, fontSize:13, fontWeight:600 }}>{err}</div>}
               {msg && <div style={{ color:C.addBtn, fontSize:13, fontWeight:600 }}>{msg}</div>}
- 
+
               {mode === "login" && (
                 <button disabled={busy} onClick={handleLogin} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "登入中…" : "登入"}</button>
               )}
@@ -758,7 +758,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
                 <button disabled={busy} onClick={handleReset} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "寄送中…" : "寄送重設密碼信"}</button>
               )}
             </div>
- 
+
             <div style={{ display:"flex", justifyContent:"center", gap:14, marginTop:18, fontSize:13 }}>
               {mode !== "login" && <button onClick={() => { setMode("login"); setErr(""); setMsg(""); }} style={{ background:"none", border:"none", color:C.primary, cursor:"pointer", fontWeight:600, fontFamily:"inherit" }}>登入</button>}
               {mode !== "signup" && <button onClick={() => { setMode("signup"); setErr(""); setMsg(""); }} style={{ background:"none", border:"none", color:C.primary, cursor:"pointer", fontWeight:600, fontFamily:"inherit" }}>註冊帳號</button>}
@@ -770,7 +770,7 @@ function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
     </div>
   );
 }
- 
+
 // ════════════════════════════════════════════════════════════════════════════
 // ── MAIN APP ──────────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
@@ -780,7 +780,7 @@ function App() {
   const [myRole, setMyRole] = useState(null); // 'admin' | 'member' | null
   const [myName, setMyName] = useState("");
   const [myBranch, setMyBranch] = useState("內湖");
- 
+
   const [products, setProducts] = useState(() => localLoad(SK_PRODUCTS, DEFAULT_PRODUCTS));
   const [zones,    setZones]    = useState(() => localLoad(SK_ZONES,    DEFAULT_ZONES));
   const [orders,   setOrders]   = useState(() => localLoad(SK_ORDERS,   []));
@@ -790,17 +790,17 @@ function App() {
   const [summaryDetail, setSummaryDetail] = useState(null);
   const [tab,      setTab]      = useState("order");
   const [toast,    setToast]    = useState("");
- 
+
   // cloud sync status
   const [syncStatus, setSyncStatus] = useState("offline"); // syncing | synced | error | offline
   const [isLoading,  setIsLoading]  = useState(true);
- 
+
   // manage sub-state
   const [manageView,  setManageView]  = useState("zones");
   const [activeZone,  setActiveZone]  = useState(null);
   const [longPressId, setLongPressId] = useState(null);
   const longPressTimer = useRef(null);
- 
+
   // modals
   const [showExport,     setShowExport]     = useState(false);
   const [showAdd,        setShowAdd]        = useState(false);
@@ -813,17 +813,17 @@ function App() {
   const [orderToDelete,  setOrderToDelete]  = useState(null);
   const [orderToEdit,    setOrderToEdit]    = useState(null);
   const [editingOrderItems, setEditingOrderItems] = useState([]);
- 
+
   // forms
   const [form,     setForm]     = useState({ name:"", unit:"", note:"", zone:"A" });
   const [zoneForm, setZoneForm] = useState({ name:"" });
- 
+
   // 個人資料 / 成員管理
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
- 
+
   const isAdmin = myRole === "admin";
- 
+
   // ── 監聽登入狀態 ──────────────────────────────────────────────────────────
   // isRecoveryMode：使用者點擊「重設密碼信」裡的連結進來時，Supabase 會自動
   // 建立一個暫時的 session，但這不代表使用者「正常登入」了 —— 必須先導向
@@ -833,7 +833,7 @@ function App() {
     const search = window.location.search || "";
     return hash.includes("type=recovery") || search.includes("type=recovery");
   });
- 
+
   useEffect(() => {
     sb.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -845,7 +845,7 @@ function App() {
     });
     return () => listener.subscription.unsubscribe();
   }, []);
- 
+
   // ── 登入後查詢自己的角色、姓名、分院、是否需強制改密碼（讀取 profiles 表）──
   useEffect(() => {
     if (!session) { setMyRole(null); setMyName(""); setMyBranch("內湖"); setMustChangePassword(false); return; }
@@ -865,7 +865,7 @@ function App() {
       }
     })();
   }, [session]);
- 
+
   // ── 啟動 / 登入後 從 Supabase 載入資料 ──────────────────────────────────
   const loadFromCloud = useCallback(async (silent) => {
     if (!silent) setIsLoading(true);
@@ -876,11 +876,11 @@ function App() {
         sbGet(SK_ZONES),
         sbGet(SK_ORDERS),
       ]);
- 
+
       if (cloudProducts) { setProducts(cloudProducts); localSave(SK_PRODUCTS, cloudProducts); }
       if (cloudZones)    { setZones(cloudZones);       localSave(SK_ZONES,    cloudZones); }
       if (cloudOrders)   { setOrders(cloudOrders);     localSave(SK_ORDERS,   cloudOrders); }
- 
+
       setSyncStatus("synced");
     } catch {
       setSyncStatus("error");
@@ -888,11 +888,11 @@ function App() {
       if (!silent) setIsLoading(false);
     }
   }, []);
- 
+
   useEffect(() => {
     if (session) loadFromCloud(false);
   }, [session, loadFromCloud]);
- 
+
   // ── 切到「管理品項」或「叫貨」分頁時，靜默重新拉取一次雲端資料 ─────────
   // 這樣手機/電腦互相切換頁籤時，能看到對方剛新增/刪除的最新品項
   useEffect(() => {
@@ -900,17 +900,17 @@ function App() {
       loadFromCloud(true);
     }
   }, [tab, session, loadFromCloud]);
- 
+
   // ── 每 30 秒背景自動同步一次（多人同時使用時降低看到舊資料的機率）──────
   useEffect(() => {
     if (!session) return;
     const t = setInterval(() => loadFromCloud(true), 30000);
     return () => clearInterval(t);
   }, [session, loadFromCloud]);
- 
+
   // ── 資料變動時同步到 Supabase + localStorage ──────────────────────────────
   const syncTimeouts = useRef({});
- 
+
   function debouncedSync(key, value) {
     localSave(key, value);
     clearTimeout(syncTimeouts.current[key]);
@@ -920,7 +920,7 @@ function App() {
       setSyncStatus(ok ? "synced" : "error");
     }, 500);
   }
- 
+
   function updateProducts(updater) {
     setProducts(prev => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -942,7 +942,7 @@ function App() {
       return next;
     });
   }
- 
+
   // ── Sorted products ───────────────────────────────────────────────────────
   const orderedProducts = useMemo(() => {
     const zoneOrder = zones.map(z => z.id);
@@ -953,32 +953,32 @@ function App() {
       return (a.order || 0) - (b.order || 0);
     });
   }, [products, zones]);
- 
+
   const filteredProducts = useMemo(() =>
     orderedProducts.filter(p => p.name.includes(search)),
     [orderedProducts, search]
   );
- 
+
   const selectedItems = useMemo(() =>
     orderedProducts.filter(p => qty[p.id] > 0).map(p => ({ ...p, qty: qty[p.id] })),
     [orderedProducts, qty]
   );
- 
+
   const exportText = useMemo(() =>
     `${myBranch}叫貨\n` + selectedItems.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
     [selectedItems, myBranch]
   );
- 
+
   const zoneProducts = useMemo(() => {
     if (!activeZone) return [];
     return products
       .filter(p => p.zone === activeZone)
-      .sort((a, b) => (a.order || 0) - (b.order || 0));
+      .sort((a, b) => (a.order || 0) - (b.order || 0) || String(a.id).localeCompare(String(b.id)));
   }, [products, activeZone]);
- 
+
   // ── 管理員：當月所有分院叫貨加總 ─────────────────────────────────────────
   const currentMonthLabel = useMemo(() => `${new Date().getMonth() + 1}月`, []);
- 
+
   const monthlySummary = useMemo(() => {
     const thisMonthOrders = orders.filter(o => o.monthLabel === currentMonthLabel);
     const map = {}; // name -> { name, unit, qty, branches: { branchName: qty } }
@@ -992,12 +992,12 @@ function App() {
     });
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name, "zh-TW"));
   }, [orders, currentMonthLabel]);
- 
+
   const monthlySummaryText = useMemo(() =>
     `${currentMonthLabel}叫貨\n` + monthlySummary.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
     [monthlySummary, currentMonthLabel]
   );
- 
+
   // ── Order submit ──────────────────────────────────────────────────────────
   function handleSubmitOrder() {
     if (selectedItems.length === 0) { setToast("請先選擇品項數量"); return; }
@@ -1015,21 +1015,21 @@ function App() {
     setShowExport(false);
     setToast("叫貨單已儲存並同步！");
   }
- 
+
   function handleCopyExport() {
     if (exportText) { copyTextToClipboard(exportText); setToast("已複製到剪貼簿！"); }
   }
- 
+
   // ── History Order Actions ─────────────────────────────────────────────────
   function handleOpenEditOrder(order) {
     setOrderToEdit(order);
     setEditingOrderItems(JSON.parse(JSON.stringify(order.items)));
   }
- 
+
   function handleUpdateOrderItemQty(index, newQty) {
     setEditingOrderItems(prev => prev.map((item, i) => i === index ? { ...item, qty: newQty } : item));
   }
- 
+
   function handleSaveEditOrder() {
     const finalItems = editingOrderItems.filter(item => item.qty > 0);
     if (finalItems.length === 0) { setToast("品項數量不可全部為0，如不需此單請直接刪除"); return; }
@@ -1039,7 +1039,7 @@ function App() {
     setOrderToEdit(null);
     setToast("訂單內容已更新！");
   }
- 
+
   function handleDeleteOrder() {
     if (!isAdmin) { setToast("僅管理員可刪除訂單"); setOrderToDelete(null); return; }
     updateOrders(prev => prev.filter(o => !(o.id === orderToDelete.id && o.time === orderToDelete.time)));
@@ -1047,7 +1047,7 @@ function App() {
     setOrderToDelete(null);
     setToast("訂單已刪除！");
   }
- 
+
   // ── Product CRUD ──────────────────────────────────────────────────────────
   function openAdd() {
     const defaultZone = activeZone || (zones[0]?.id || "A");
@@ -1058,7 +1058,7 @@ function App() {
     setForm({ name: p.name, unit: p.unit, note: p.note, zone: p.zone || zones[0]?.id || "A" });
     setEditItem(p);
   }
- 
+
   function saveAdd() {
     if (!form.name.trim()) { setToast("請輸入品名"); return; }
     const zoneProds = products.filter(p => p.zone === form.zone);
@@ -1068,7 +1068,7 @@ function App() {
     setShowAdd(false);
     setToast("品項已新增並同步！");
   }
- 
+
   function saveEdit() {
     if (!form.name.trim()) { setToast("請輸入品名"); return; }
     updateProducts(prev => prev.map(p => p.id === editItem.id
@@ -1078,7 +1078,7 @@ function App() {
     setEditItem(null);
     setToast("已更新並同步！");
   }
- 
+
   function confirmDelete() {
     if (!isAdmin) { setToast("僅管理員可刪除品項"); setDeleteItem(null); return; }
     updateProducts(prev => prev.filter(p => p.id !== deleteItem.id));
@@ -1086,35 +1086,31 @@ function App() {
     setDeleteItem(null);
     setToast("已刪除！");
   }
- 
-  function moveItem(id, dir) {
-    // 先取得目前這個區域的品項，用 order 排序（加 id 作為第二排序鍵，確保穩定）
-    const zProds = [...zoneProducts].sort((a, b) =>
-      (a.order || 0) - (b.order || 0) || a.id - b.id
-    );
-    const idx = zProds.findIndex(p => p.id === id);
-    if (idx < 0) return;
+
+  function moveItem(idx, dir) {
+    // zoneProducts 已經是排好的陣列，直接用傳入的 idx 做交換
+    const zProds = zoneProducts;
     const swapIdx = idx + dir;
-    if (swapIdx < 0 || swapIdx >= zProds.length) return;
- 
+    if (idx < 0 || swapIdx < 0 || swapIdx >= zProds.length) return;
+
     // 在陣列裡直接交換兩個元素的位置
     const reordered = [...zProds];
     [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
- 
-    // 重新指派 order 為連續整數（1, 2, 3...），消除任何重複或混亂的 order 值
+
+    // 重新指派 order 為連續整數（1, 2, 3...）
     const orderMap = {};
     reordered.forEach((p, i) => { orderMap[p.id] = i + 1; });
- 
+
     updateProducts(prev => prev.map(p =>
       orderMap[p.id] !== undefined ? { ...p, order: orderMap[p.id] } : p
     ));
   }
- 
+
   function handleTouchStart(id) {
     longPressTimer.current = setTimeout(() => setLongPressId(id), 500);
   }
   function handleTouchEnd() { clearTimeout(longPressTimer.current); }
- 
+
   // ── Zone CRUD ──────────────────────────────────────────────────────────────
   function saveAddZone() {
     if (!zoneForm.name.trim()) { setToast("請輸入區域名稱"); return; }
@@ -1124,7 +1120,7 @@ function App() {
     setShowAddZone(false);
     setToast("區域已新增！");
   }
- 
+
   function confirmDeleteZone() {
     if (!isAdmin) { setToast("僅管理員可刪除區域"); setDeleteZone(null); return; }
     const zid = deleteZone.id;
@@ -1136,33 +1132,33 @@ function App() {
     setToast("區域已刪除！");
     if (activeZone === zid) setActiveZone(null);
   }
- 
+
   function saveEditZone() {
     if (!zoneForm.name.trim()) { setToast("請輸入區域名稱"); return; }
     updateZones(prev => prev.map(z => z.id === editZone.id ? { ...z, name: zoneForm.name.trim() } : z));
     setEditZone(null);
     setToast("已更新！");
   }
- 
+
   async function handleLogout() {
     await sb.auth.signOut();
     setSession(null);
     setMyRole(null);
     setTab("order");
   }
- 
+
   const tabBar = [
     { key:"order",   label:"叫貨",   icon:<IcoList /> },
     { key:"history", label:"紀錄",   icon:<IcoHistory /> },
     { key:"manage",  label:"管理品項", icon:<IcoSettings /> },
     ...(isAdmin ? [{ key:"summary", label:"總覽", icon:<IcoChart /> }] : []),
   ];
- 
+
   // ── 尚未確認登入狀態：顯示空白避免畫面閃爍 ──────────────────────────────
   if (!authChecked) {
     return <div style={{ minHeight:"100vh", background:C.bg }} />;
   }
- 
+
   // ── 重設密碼連結點進來：強制走「設定新密碼」流程，不可直接放行進主畫面 ──
   if (isRecoveryMode) {
     return <AuthScreen onAuthed={setSession} forceRecovery onRecoveryDone={() => {
@@ -1171,12 +1167,12 @@ function App() {
       window.history.replaceState(null, "", window.location.pathname);
     }} />;
   }
- 
+
   // ── 未登入：顯示登入畫面 ─────────────────────────────────────────────────
   if (!session) {
     return <AuthScreen onAuthed={setSession} />;
   }
- 
+
   // ── Loading screen ────────────────────────────────────────────────────────
   if (isLoading || myRole === null) {
     return (
@@ -1189,15 +1185,15 @@ function App() {
       </div>
     );
   }
- 
+
   // ── 帳號被管理員重設密碼後，強制要求設定新密碼才能繼續使用 ──────────────
   if (mustChangePassword) {
     return <ForceChangePasswordScreen onDone={() => setMustChangePassword(false)} />;
   }
- 
+
   return (
     <div style={{ fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif", background:C.bg, minHeight:"100vh", maxWidth:480, margin:"0 auto" }}>
- 
+
       {/* ── HEADER ── */}
       <div style={{ background:C.header, color:"#fff", padding:"14px 18px 12px", position:"sticky", top:0, zIndex:100, boxShadow:"0 2px 10px rgba(0,0,0,0.15)" }}>
         {tab === "manage" && manageView === "products" ? (
@@ -1229,7 +1225,7 @@ function App() {
           </div>
         )}
       </div>
- 
+
       {/* ══════════════ ORDER TAB ══════════════ */}
       {tab === "order" && (
         <div style={{ paddingBottom:110 }}>
@@ -1241,7 +1237,7 @@ function App() {
               {search && <button onClick={() => setSearch("")} style={{ background:"none", border:"none", color:C.sub, cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>}
             </div>
           </div>
- 
+
           <div style={{ padding:"4px 16px", display:"flex", flexDirection:"column", gap:8 }}>
             {filteredProducts.length === 0 && (
               <div style={{ textAlign:"center", color:C.sub, padding:"48px 0" }}>找不到符合品項</div>
@@ -1290,7 +1286,7 @@ function App() {
               });
             })()}
           </div>
- 
+
           {selectedItems.length > 0 && (
             <div style={{ position:"fixed", bottom:66, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, padding:"10px 16px", background:`linear-gradient(to top, ${C.bg} 60%, transparent)` }}>
               <button onClick={() => setShowExport(true)} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
@@ -1300,7 +1296,7 @@ function App() {
           )}
         </div>
       )}
- 
+
       {/* ══════════════ HISTORY TAB ══════════════ */}
       {tab === "history" && (
         <div style={{ padding:"14px 16px 90px", display:"flex", flexDirection:"column", gap:10 }}>
@@ -1359,11 +1355,11 @@ function App() {
           ))}
         </div>
       )}
- 
+
       {/* ══════════════ MANAGE TAB ══════════════ */}
       {tab === "manage" && (
         <div style={{ padding:"14px 16px 90px" }}>
- 
+
           {manageView === "zones" && (
             <>
               <button onClick={() => setShowAddZone(true)}
@@ -1396,7 +1392,7 @@ function App() {
               </div>
             </>
           )}
- 
+
           {manageView === "products" && (
             <>
               <button onClick={openAdd}
@@ -1426,9 +1422,9 @@ function App() {
                     <div style={{ display:"flex", gap:5, flexShrink:0, alignItems:"center" }}>
                       {longPressId !== null ? (
                         <>
-                          <button onClick={() => moveItem(p.id, -1)} disabled={idx === 0}
+                          <button onClick={() => moveItem(idx, -1)} disabled={idx === 0}
                             style={{ background: idx === 0 ? C.border : C.light, border:"none", borderRadius:8, padding:"6px 8px", cursor: idx === 0 ? "default" : "pointer", color: idx === 0 ? C.light : C.primary, display:"flex", opacity: idx === 0 ? 0.4 : 1 }}><IcoUp /></button>
-                          <button onClick={() => moveItem(p.id, 1)} disabled={idx === zoneProducts.length - 1}
+                          <button onClick={() => moveItem(idx, 1)} disabled={idx === zoneProducts.length - 1}
                             style={{ background: idx === zoneProducts.length-1 ? C.border : C.light, border:"none", borderRadius:8, padding:"6px 8px", cursor: idx === zoneProducts.length-1 ? "default" : "pointer", color: idx === zoneProducts.length-1 ? C.light : C.primary, display:"flex", opacity: idx === zoneProducts.length-1 ? 0.4 : 1 }}><IcoDown /></button>
                         </>
                       ) : (
@@ -1453,17 +1449,17 @@ function App() {
           )}
         </div>
       )}
- 
+
       {/* ══════════════ SUMMARY TAB（管理員：當月跨分院加總）══════════════ */}
       {tab === "summary" && isAdmin && (
         <div style={{ padding:"14px 16px 110px" }}>
           <div style={{ fontWeight:700, fontSize:16, color:C.text, marginBottom:4 }}>{currentMonthLabel}叫貨總覽</div>
           <div style={{ fontSize:12, color:C.sub, marginBottom:14 }}>所有分院本月叫貨品項加總，點品項可看分院明細</div>
- 
+
           {monthlySummary.length === 0 && (
             <div style={{ textAlign:"center", color:C.sub, paddingTop:60 }}>本月還沒有任何分院叫貨</div>
           )}
- 
+
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             {monthlySummary.map((item, idx) => (
               <div key={item.name} onClick={() => setSummaryDetail(item)}
@@ -1473,7 +1469,7 @@ function App() {
               </div>
             ))}
           </div>
- 
+
           {monthlySummary.length > 0 && (
             <div style={{ position:"fixed", bottom:66, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, padding:"10px 16px", background:`linear-gradient(to top, ${C.bg} 60%, transparent)` }}>
               <button onClick={() => {
@@ -1486,7 +1482,7 @@ function App() {
           )}
         </div>
       )}
- 
+
       {/* ── TAB BAR ── */}
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:"#e8e0d6", borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100 }}>
         {tabBar.map(t => (
@@ -1496,7 +1492,7 @@ function App() {
           </button>
         ))}
       </div>
- 
+
       {/* ── EXPORT MODAL ── */}
       {showExport && (
         <Modal title="本次叫貨單" onClose={() => setShowExport(false)}>
@@ -1516,7 +1512,7 @@ function App() {
           </button>
         </Modal>
       )}
- 
+
       {/* ── ADD PRODUCT MODAL ── */}
       {showAdd && (
         <Modal title="新增品項" onClose={() => setShowAdd(false)}>
@@ -1547,7 +1543,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── EDIT PRODUCT MODAL ── */}
       {editItem && (
         <Modal title="編輯品項" onClose={() => setEditItem(null)}>
@@ -1578,7 +1574,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── DELETE PRODUCT MODAL ── */}
       {deleteItem && (
         <Modal title="確認刪除" onClose={() => setDeleteItem(null)}>
@@ -1593,7 +1589,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── ADD ZONE MODAL ── */}
       {showAddZone && (
         <Modal title="新增區域" onClose={() => setShowAddZone(false)}>
@@ -1606,7 +1602,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── EDIT ZONE MODAL ── */}
       {editZone && (
         <Modal title="編輯區域名稱" onClose={() => setEditZone(null)}>
@@ -1619,7 +1615,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── DELETE ZONE MODAL ── */}
       {deleteZone && (
         <Modal title="確認刪除區域" onClose={() => setDeleteZone(null)}>
@@ -1635,7 +1631,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── EDIT ORDER MODAL ── */}
       {orderToEdit && (
         <Modal title={`編輯訂單內容 - ${orderToEdit.id}`} onClose={() => setOrderToEdit(null)}>
@@ -1664,7 +1660,7 @@ function App() {
           </button>
         </Modal>
       )}
- 
+
       {/* ── DELETE ORDER MODAL ── */}
       {orderToDelete && (
         <Modal title="刪除訂單" onClose={() => setOrderToDelete(null)}>
@@ -1679,7 +1675,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── SUMMARY DETAIL MODAL（品項的分院明細）── */}
       {summaryDetail && (
         <Modal title={summaryDetail.name} onClose={() => setSummaryDetail(null)}>
@@ -1697,7 +1693,7 @@ function App() {
           </div>
         </Modal>
       )}
- 
+
       {/* ── PROFILE / MEMBERS MODAL ── */}
       {showProfile && (
         <ProfileModal
@@ -1710,12 +1706,12 @@ function App() {
           setToast={setToast}
         />
       )}
- 
+
       {toast && <Toast msg={toast} onDone={() => setToast("")} />}
     </div>
   );
 }
- 
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
   </script>
