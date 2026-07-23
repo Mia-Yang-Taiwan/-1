@@ -7,12 +7,14 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="錦禾叫貨" />
   <meta name="theme-color" content="#7c512e" />
-  <title>錦禾中醫叫貨系統</title>
+  <title>錦禾倉庫叫貨</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #f3ebe2; -webkit-tap-highlight-color: transparent; font-family: 'Noto Sans TC','PingFang TC',system-ui,sans-serif; }
     #root { max-width: 480px; margin: 0 auto; }
     .drag-over { outline: 2px dashed #7c512e; outline-offset: 2px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; display: inline-block; }
   </style>
 </head>
 <body>
@@ -20,9 +22,66 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script type="text/babel" data-presets="react">
 const { useState, useMemo, useEffect, useRef, useCallback } = React;
-
+ 
+// ── Supabase Config ───────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://hbtmjkhwhfzrgbniwjii.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhidG1qa2h3aGZ6cmdibml3amlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE2Mzg3NjUsImV4cCI6MjA5NzIxNDc2NX0.FpGs-EBTmA-pE9At3PPkDMsk6n82d6d7nMda68WpHjw";
+const TABLE = "warehouse_data";
+ 
+if (!window.supabase || !window.supabase.createClient) {
+  document.getElementById("root").innerHTML =
+    '<div style="padding:40px 24px;text-align:center;font-family:sans-serif;color:#7c512e;">' +
+    '<div style="font-size:36px;margin-bottom:12px;">⚠️</div>' +
+    '<div style="font-weight:700;font-size:16px;margin-bottom:8px;">系統元件載入失敗</div>' +
+    '<div style="font-size:13px;color:#6b5740;">請檢查網路連線後重新整理頁面（下拉或按 F5）</div>' +
+    '</div>';
+  throw new Error("Supabase SDK failed to load from CDN");
+}
+ 
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+ 
+const sbHeaders = {
+  "apikey": SUPABASE_KEY,
+  "Content-Type": "application/json",
+  "Prefer": "return=minimal",
+};
+ 
+// 取得目前登入者的 access token（REST 直連需要帶這個才能符合 RLS）
+async function getAuthHeader() {
+  const { data } = await sb.auth.getSession();
+  const token = data?.session?.access_token || SUPABASE_KEY;
+  return { ...sbHeaders, "Authorization": `Bearer ${token}` };
+}
+ 
+// 從 Supabase 讀取一個 key 的 value
+async function sbGet(key) {
+  try {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}?key=eq.${encodeURIComponent(key)}&select=value`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": headers.Authorization }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.length > 0 ? data[0].value : null;
+  } catch { return null; }
+}
+ 
+// 寫入或更新一個 key
+async function sbSet(key, value) {
+  try {
+    const headers = await getAuthHeader();
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
+      method: "POST",
+      headers: { ...headers, "Prefer": "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ key, value, updated_at: new Date().toISOString() })
+    });
+    return res.ok;
+  } catch { return false; }
+}
+ 
 // ── Default Data ─────────────────────────────────────────────────────────────
 const DEFAULT_ZONES = [
   { id: "A", name: "A 區" },
@@ -31,105 +90,121 @@ const DEFAULT_ZONES = [
   { id: "D", name: "D 區" },
   { id: "E", name: "E 區" },
 ];
-
+ 
 const DEFAULT_PRODUCTS = [
-  { id: 1,  name: "處方單",          unit: "本",  note: "", zone: "A", order: 1 },
-  { id: 2,  name: "掛號單",          unit: "本",  note: "", zone: "A", order: 2 },
-  { id: 3,  name: "粉藥包藥紙",      unit: "包",  note: "", zone: "A", order: 3 },
-  { id: 4,  name: "水藥包藥紙",      unit: "包",  note: "", zone: "A", order: 4 },
-  { id: 5,  name: "3M膚色膠布",      unit: "捲",  note: "", zone: "A", order: 5 },
-  { id: 6,  name: "黃土艾炭",        unit: "箱",  note: "", zone: "A", order: 6 },
-  { id: 7,  name: "馬桶坐墊消毒液",  unit: "瓶",  note: "", zone: "A", order: 7 },
-  { id: 8,  name: "泡沫給皂液",      unit: "瓶",  note: "", zone: "A", order: 8 },
-  { id: 9,  name: "不織布",          unit: "包",  note: "", zone: "A", order: 9 },
-  { id: 10, name: "彈性繃帶7CM",     unit: "捲",  note: "", zone: "A", order: 10 },
-  { id: 11, name: "網狀繃帶4號",     unit: "捲",  note: "", zone: "A", order: 11 },
-  { id: 12, name: "網狀繃帶5號",     unit: "捲",  note: "", zone: "A", order: 12 },
-  { id: 13, name: "神效（乾藥布）",  unit: "包",  note: "", zone: "A", order: 13 },
-  { id: 14, name: "舒痛寧（水性藥布）", unit: "包", note: "", zone: "A", order: 14 },
-  { id: 15, name: "十字洞巾",        unit: "個",  note: "", zone: "A", order: 15 },
-  { id: 16, name: "棉球",            unit: "包",  note: "", zone: "A", order: 16 },
-  { id: 17, name: "拔罐杯3號",       unit: "個",  note: "", zone: "B", order: 1 },
-  { id: 18, name: "拔罐杯4號",       unit: "個",  note: "", zone: "B", order: 2 },
-  { id: 19, name: "背膠",            unit: "捲",  note: "", zone: "B", order: 3 },
-  { id: 20, name: "肌內效貼布",      unit: "捲",  note: "", zone: "B", order: 4 },
-  { id: 21, name: "藥膏罐(小)",      unit: "個",  note: "", zone: "B", order: 5 },
-  { id: 22, name: "藥膏罐(大)",      unit: "個",  note: "", zone: "B", order: 6 },
-  { id: 23, name: "鋁罐",            unit: "個",  note: "", zone: "B", order: 7 },
-  { id: 24, name: "清脂激酶罐",      unit: "個",  note: "", zone: "B", order: 8 },
-  { id: 25, name: "紅頭藥罐 大",     unit: "個",  note: "", zone: "B", order: 9 },
-  { id: 26, name: "紅頭藥罐 小",     unit: "個",  note: "", zone: "B", order: 10 },
-  { id: 27, name: "金頭藥罐 大",     unit: "個",  note: "", zone: "B", order: 11 },
-  { id: 28, name: "金頭藥罐 小",     unit: "個",  note: "", zone: "B", order: 12 },
-  { id: 29, name: "口罩",            unit: "盒",  note: "", zone: "B", order: 13 },
-  { id: 30, name: "三黃粉",          unit: "包",  note: "", zone: "B", order: 14 },
-  { id: 31, name: "乳膠手套S號",     unit: "盒",  note: "", zone: "B", order: 15 },
-  { id: 32, name: "乳膠手套M號",     unit: "盒",  note: "", zone: "B", order: 16 },
-  { id: 33, name: "針4005",          unit: "盒",  note: "", zone: "C", order: 1 },
-  { id: 34, name: "針4205",          unit: "盒",  note: "", zone: "C", order: 2 },
-  { id: 35, name: "針3410",          unit: "盒",  note: "", zone: "C", order: 3 },
-  { id: 36, name: "針3215",          unit: "盒",  note: "", zone: "C", order: 4 },
-  { id: 37, name: "針2830",          unit: "盒",  note: "", zone: "C", order: 5 },
-  { id: 38, name: "針2840",          unit: "盒",  note: "", zone: "C", order: 6 },
-  { id: 39, name: "推針A2820",       unit: "盒",  note: "", zone: "C", order: 7 },
-  { id: 40, name: "推針A3015",       unit: "盒",  note: "", zone: "C", order: 8 },
-  { id: 41, name: "清鈴針（橘）",    unit: "盒",  note: "", zone: "C", order: 9 },
-  { id: 42, name: "磁珠",            unit: "包",  note: "", zone: "C", order: 10 },
-  { id: 43, name: "耳針",            unit: "盒",  note: "", zone: "C", order: 11 },
-  { id: 44, name: "羊腸線C15 3-0",   unit: "盒",  note: "", zone: "C", order: 12 },
-  { id: 45, name: "羊腸線C15 4-0",   unit: "盒",  note: "", zone: "C", order: 13 },
-  { id: 46, name: "針頭23G 藍",      unit: "盒",  note: "", zone: "C", order: 14 },
-  { id: 47, name: "針頭22G 黑",      unit: "盒",  note: "", zone: "C", order: 15 },
-  { id: 48, name: "針頭24G 紅",      unit: "盒",  note: "", zone: "C", order: 16 },
-  { id: 49, name: "扁針1號",         unit: "盒",  note: "", zone: "C", order: 17 },
-  { id: 50, name: "扁針2號",         unit: "盒",  note: "", zone: "C", order: 18 },
-  { id: 51, name: "扁針3號",         unit: "盒",  note: "", zone: "C", order: 19 },
-  { id: 52, name: "夾鏈袋1號",       unit: "包",  note: "", zone: "D", order: 1 },
-  { id: 53, name: "夾鏈袋2號",       unit: "包",  note: "", zone: "D", order: 2 },
-  { id: 54, name: "夾鏈袋3號",       unit: "包",  note: "", zone: "D", order: 3 },
-  { id: 55, name: "夾鏈袋4號",       unit: "包",  note: "", zone: "D", order: 4 },
-  { id: 56, name: "夾鏈袋5號",       unit: "包",  note: "", zone: "D", order: 5 },
-  { id: 57, name: "垃圾袋（中）",    unit: "包",  note: "", zone: "D", order: 6 },
-  { id: 58, name: "垃圾袋（大）",    unit: "包",  note: "", zone: "D", order: 7 },
-  { id: 59, name: "錦禾logo袋",      unit: "包",  note: "", zone: "D", order: 8 },
-  { id: 60, name: "優活長版衛生紙",  unit: "箱",  note: "", zone: "D", order: 9 },
-  { id: 61, name: "五月花",          unit: "箱",  note: "", zone: "D", order: 10 },
-  { id: 62, name: "擦手紙",          unit: "箱",  note: "", zone: "D", order: 11 },
-  { id: 63, name: "護膚墊",          unit: "包",  note: "", zone: "D", order: 12 },
-  { id: 64, name: "保鮮盒",          unit: "個",  note: "", zone: "D", order: 13 },
-  { id: 65, name: "紙杯",            unit: "條",  note: "", zone: "D", order: 14 },
-  { id: 66, name: "酒精",            unit: "箱",  note: "一箱6罐", zone: "D", order: 15 },
-  { id: 67, name: "丹田灸網子",      unit: "個",  note: "", zone: "E", order: 1 },
-  { id: 68, name: "電針線",          unit: "條",  note: "", zone: "E", order: 2 },
-  { id: 69, name: "電針線插座",      unit: "個",  note: "", zone: "E", order: 3 },
-  { id: 70, name: "紅外線燈泡",      unit: "個",  note: "", zone: "E", order: 4 },
-  { id: 71, name: "薰針機管子",      unit: "個",  note: "", zone: "E", order: 5 },
-  { id: 72, name: "列表機墨水帶（藥局用）", unit: "個", note: "", zone: "E", order: 6 },
-  { id: 73, name: "列表機墨水帶（櫃檯用）", unit: "個", note: "", zone: "E", order: 7 },
-  { id: 74, name: "垃圾袋（瓶罐）",  unit: "包",  note: "", zone: "E", order: 8 },
-  { id: 75, name: "濾網",            unit: "個",  note: "", zone: "E", order: 9 },
-  { id: 76, name: "地板清潔液",      unit: "瓶",  note: "", zone: "E", order: 10 },
-  { id: 77, name: "浮針",            unit: "盒",  note: "", zone: "E", order: 11 },
-  { id: 78, name: "韓式美顏針(紅)",  unit: "盒",  note: "", zone: "E", order: 12 },
-  { id: 79, name: "韓式美顏針(淺綠)", unit: "盒", note: "", zone: "E", order: 13 },
-  { id: 80, name: "韓式美顏針(綠)",  unit: "盒",  note: "", zone: "E", order: 14 },
-  { id: 81, name: "韓式美顏針(藍)",  unit: "盒",  note: "", zone: "E", order: 15 },
+  { id: 1, name: "處方單", unit: "箱", note: "", zone: "A", order: 1 },
+  { id: 2, name: "掛號單", unit: "箱", note: "", zone: "A", order: 2 },
+  { id: 3, name: "粉藥包藥紙", unit: "箱", note: "", zone: "A", order: 3 },
+  { id: 4, name: "水藥包藥紙", unit: "箱", note: "", zone: "A", order: 4 },
+  { id: 5, name: "3M膠布", unit: "盒", note: "", zone: "A", order: 5 },
+  { id: 6, name: "黃土艾炭", unit: "罐", note: "", zone: "A", order: 6 },
+  { id: 7, name: "馬桶坐墊消毒液", unit: "瓶", note: "", zone: "A", order: 7 },
+  { id: 8, name: "泡沫給皂液", unit: "瓶", note: "", zone: "A", order: 8 },
+  { id: 9, name: "不織布", unit: "包", note: "", zone: "A", order: 9 },
+  { id: 10, name: "彈性繃帶7CM", unit: "捲", note: "", zone: "A", order: 10 },
+  { id: 11, name: "網狀繃帶4號", unit: "捲", note: "", zone: "A", order: 11 },
+  { id: 12, name: "網狀繃帶5號", unit: "捲", note: "", zone: "A", order: 12 },
+  { id: 13, name: "神效（乾藥布）", unit: "箱", note: "", zone: "A", order: 13 },
+  { id: 14, name: "舒痛寧（水性藥布）", unit: "箱", note: "", zone: "A", order: 14 },
+  { id: 15, name: "十字洞巾", unit: "箱", note: "", zone: "A", order: 15 },
+  { id: 16, name: "棉球", unit: "包", note: "", zone: "A", order: 16 },
+  { id: 17, name: "拔罐杯3號", unit: "個", note: "", zone: "B", order: 1 },
+  { id: 18, name: "拔罐杯4號", unit: "個", note: "", zone: "B", order: 2 },
+  { id: 19, name: "背膠", unit: "捲", note: "", zone: "B", order: 3 },
+  { id: 20, name: "肌內效貼布", unit: "捲", note: "", zone: "B", order: 4 },
+  { id: 21, name: "藥膏罐（小）", unit: "個", note: "", zone: "B", order: 5 },
+  { id: 22, name: "藥膏罐（大）", unit: "個", note: "", zone: "B", order: 6 },
+  { id: 23, name: "鋁罐", unit: "個", note: "", zone: "B", order: 7 },
+  { id: 24, name: "清脂激酶罐", unit: "個", note: "", zone: "B", order: 8 },
+  { id: 25, name: "紅頭藥罐（大）", unit: "個", note: "", zone: "B", order: 9 },
+  { id: 26, name: "紅頭藥罐（小）", unit: "個", note: "", zone: "B", order: 10 },
+  { id: 27, name: "金頭藥罐（大）", unit: "個", note: "", zone: "B", order: 11 },
+  { id: 28, name: "金頭藥罐（小）", unit: "個", note: "", zone: "B", order: 12 },
+  { id: 29, name: "口罩", unit: "盒", note: "", zone: "B", order: 13 },
+  { id: 30, name: "三黃粉", unit: "包", note: "", zone: "B", order: 14 },
+  { id: 31, name: "乳膠手套S", unit: "盒", note: "", zone: "B", order: 15 },
+  { id: 32, name: "乳膠手套M", unit: "盒", note: "", zone: "B", order: 16 },
+  { id: 33, name: "針4005", unit: "盒", note: "", zone: "C", order: 1 },
+  { id: 34, name: "針4205", unit: "盒", note: "", zone: "C", order: 2 },
+  { id: 35, name: "針3410", unit: "盒", note: "", zone: "C", order: 3 },
+  { id: 36, name: "針3215", unit: "盒", note: "", zone: "C", order: 4 },
+  { id: 37, name: "針2830", unit: "盒", note: "", zone: "C", order: 5 },
+  { id: 38, name: "針2840", unit: "盒", note: "", zone: "C", order: 6 },
+  { id: 39, name: "推針A2820", unit: "盒", note: "", zone: "C", order: 7 },
+  { id: 40, name: "推針A3015", unit: "盒", note: "", zone: "C", order: 8 },
+  { id: 41, name: "清鈴針（橘）", unit: "盒", note: "", zone: "C", order: 9 },
+  { id: 42, name: "磁珠", unit: "包", note: "", zone: "C", order: 10 },
+  { id: 43, name: "耳針", unit: "盒", note: "", zone: "C", order: 11 },
+  { id: 44, name: "羊腸線C153", unit: "盒", note: "", zone: "C", order: 12 },
+  { id: 45, name: "羊腸線C154", unit: "盒", note: "", zone: "C", order: 13 },
+  { id: 46, name: "針頭23G 藍", unit: "盒", note: "", zone: "C", order: 14 },
+  { id: 47, name: "針頭22G 黑", unit: "盒", note: "", zone: "C", order: 15 },
+  { id: 48, name: "針頭24G 紅", unit: "盒", note: "", zone: "C", order: 16 },
+  { id: 49, name: "扁針1號", unit: "支", note: "", zone: "C", order: 17 },
+  { id: 50, name: "扁針2號", unit: "支", note: "", zone: "C", order: 18 },
+  { id: 51, name: "扁針3號", unit: "支", note: "", zone: "C", order: 19 },
+  { id: 52, name: "夾鏈袋1號", unit: "包", note: "", zone: "D", order: 1 },
+  { id: 53, name: "夾鏈袋2號", unit: "包", note: "", zone: "D", order: 2 },
+  { id: 54, name: "夾鏈袋3號", unit: "包", note: "", zone: "D", order: 3 },
+  { id: 55, name: "夾鏈袋4號", unit: "包", note: "", zone: "D", order: 4 },
+  { id: 56, name: "夾鏈袋5號", unit: "包", note: "", zone: "D", order: 5 },
+  { id: 57, name: "垃圾袋（中）", unit: "包", note: "", zone: "D", order: 6 },
+  { id: 58, name: "垃圾袋（大）", unit: "包", note: "", zone: "D", order: 7 },
+  { id: 59, name: "錦禾logo袋", unit: "包", note: "", zone: "D", order: 8 },
+  { id: 60, name: "優活長版衛生紙", unit: "箱", note: "", zone: "D", order: 9 },
+  { id: 61, name: "五月花", unit: "箱", note: "", zone: "D", order: 10 },
+  { id: 62, name: "擦手紙", unit: "箱", note: "", zone: "D", order: 11 },
+  { id: 63, name: "護膚墊", unit: "包", note: "", zone: "D", order: 12 },
+  { id: 64, name: "保鮮盒", unit: "個", note: "", zone: "D", order: 13 },
+  { id: 65, name: "紙杯", unit: "條", note: "", zone: "D", order: 14 },
+  { id: 66, name: "酒精", unit: "箱", note: "一箱6罐", zone: "D", order: 15 },
+  { id: 67, name: "丹田灸網子", unit: "個", note: "", zone: "E", order: 1 },
+  { id: 68, name: "電針線", unit: "條", note: "", zone: "E", order: 2 },
+  { id: 69, name: "電針線插座", unit: "個", note: "", zone: "E", order: 3 },
+  { id: 70, name: "紅外線燈泡", unit: "個", note: "", zone: "E", order: 4 },
+  { id: 71, name: "薰針機管子", unit: "個", note: "", zone: "E", order: 5 },
+  { id: 72, name: "列表機墨水帶（藥局）", unit: "個", note: "", zone: "E", order: 6 },
+  { id: 73, name: "列表機墨水帶（櫃檯）", unit: "個", note: "", zone: "E", order: 7 },
+  { id: 74, name: "垃圾袋（瓶罐）", unit: "包", note: "", zone: "E", order: 8 },
+  { id: 75, name: "濾網", unit: "個", note: "", zone: "E", order: 9 },
+  { id: 76, name: "地板清潔液", unit: "瓶", note: "", zone: "E", order: 10 },
+  { id: 77, name: "浮針", unit: "盒", note: "", zone: "E", order: 11 },
+  { id: 78, name: "韓式美顏針（紅）", unit: "盒", note: "", zone: "E", order: 12 },
+  { id: 79, name: "韓式美顏針（淺）", unit: "盒", note: "", zone: "E", order: 13 },
+  { id: 80, name: "韓式美顏針（綠）", unit: "盒", note: "", zone: "E", order: 14 },
+  { id: 81, name: "韓式美顏針（藍）", unit: "盒", note: "", zone: "E", order: 15 },
 ];
-
-// qty 1..50
+ 
 const QTY_OPTIONS = [0, ...Array.from({length: 50}, (_, i) => i + 1)];
-
+ 
 const SK_PRODUCTS = "clinic_products_v3";
 const SK_ORDERS   = "clinic_orders_v3";
 const SK_ZONES    = "clinic_zones_v3";
-
-function load(key, fb) {
+ 
+// ── Local fallback helpers ────────────────────────────────────────────────────
+function localLoad(key, fb) {
   try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fb; } catch { return fb; }
 }
-function save(key, val) {
+function localSave(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
-
+ 
+function copyTextToClipboard(text) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-1000px";
+  ta.style.left = "-1000px";
+  document.body.appendChild(ta);
+  ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch { ok = false; }
+  document.body.removeChild(ta);
+  if (!ok && navigator.clipboard?.writeText) navigator.clipboard.writeText(text).catch(() => {});
+  return ok;
+}
+ 
 // ── Colours ──────────────────────────────────────────────────────────────────
 const C = {
   bg: "#f3ebe2", surface: "#e8e0d6", border: "#c4b8aa",
@@ -137,8 +212,9 @@ const C = {
   accent: "#9a6b3a", danger: "#DC4C3E",
   text: "#2e1f0f", sub: "#6b5740", light: "#cac0b5",
   selected: "#b8c4b2", rowA: "#ddd0c0", rowB: "#939c89",
+  cloud: "#4a90d9",
 };
-
+ 
 // ── Icons ─────────────────────────────────────────────────────────────────────
 const IcoSearch   = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>;
 const IcoPlus     = () => <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
@@ -150,12 +226,17 @@ const IcoHistory  = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="
 const IcoList     = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
 const IcoSettings = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
 const IcoCopy     = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
-const IcoInfo     = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>;
 const IcoUp       = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="18 15 12 9 6 15"/></svg>;
 const IcoDown     = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9"/></svg>;
-const IcoDrag     = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="5" r="1" fill="currentColor"/><circle cx="9" cy="12" r="1" fill="currentColor"/><circle cx="9" cy="19" r="1" fill="currentColor"/><circle cx="15" cy="5" r="1" fill="currentColor"/><circle cx="15" cy="12" r="1" fill="currentColor"/><circle cx="15" cy="19" r="1" fill="currentColor"/></svg>;
 const IcoBack     = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>;
-
+const IcoCloud    = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>;
+const IcoSync     = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
+const IcoUser     = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
+const IcoLogout   = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+const IcoRefresh  = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>;
+const IcoLock     = () => <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
+const IcoChart    = () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
+ 
 const inputStyle = {
   width: "100%", boxSizing: "border-box",
   border: `1.5px solid ${C.border}`, borderRadius: 10,
@@ -167,16 +248,15 @@ const btnPrimary = {
   borderRadius: 12, padding: "13px 0",
   fontSize: 15, fontWeight: 700, cursor: "pointer", width: "100%",
 };
-
-// ── Helper: generate order id ─────────────────────────────────────────────────
-function genOrderId(existingOrders) {
-  const now = new Date();
-  const month = now.getMonth() + 1;
+ 
+const BRANCHES = ["內湖", "士林", "大直"];
+ 
+function genOrderId(existingOrders, branch, month) {
   const label = `${month}月`;
-  const sameMonth = existingOrders.filter(o => o.monthLabel === label);
-  return sameMonth.length === 0 ? `${label}叫貨` : `${label}追加`;
+  const samebranchMonth = existingOrders.filter(o => o.branch === branch && o.monthLabel === label);
+  return samebranchMonth.length === 0 ? `${branch} ${label}叫貨` : `${branch} ${label}追加`;
 }
-
+ 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 function Modal({ title, onClose, children }) {
   return (
@@ -191,51 +271,679 @@ function Modal({ title, onClose, children }) {
     </div>
   );
 }
-
+ 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 function Toast({ msg, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 2000); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(onDone, 2200); return () => clearTimeout(t); }, []);
   return (
     <div style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)", background:C.text, color:"#fff", padding:"10px 22px", borderRadius:24, fontSize:14, fontWeight:600, zIndex:300, boxShadow:"0 4px 16px rgba(0,0,0,0.2)", whiteSpace:"nowrap" }}>{msg}</div>
   );
 }
-
-// ── Main App ──────────────────────────────────────────────────────────────────
+ 
+// ── Sync Status Badge ─────────────────────────────────────────────────────────
+function SyncBadge({ status, onRefresh }) {
+  // status: 'syncing' | 'synced' | 'error' | 'offline'
+  const config = {
+    syncing: { color: "#F5F5DC", label: "同步中…",   icon: <span className="spin"><IcoSync /></span> },
+    synced:  { color: "#FFFFFF", label: "雲端已同步", icon: <IcoCloud /> },
+    error:   { color: "#FFD9D2", label: "同步失敗",   icon: <IcoCloud /> },
+    offline: { color: "#A9A9A9", label: "離線模式",   icon: <IcoCloud /> },
+  };
+  const c = config[status] || config.offline;
+  return (
+    <button onClick={onRefresh} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color: c.color, background:"none", border:"none", cursor:"pointer", padding:0, fontFamily:"inherit" }}>
+      {c.icon} {c.label}
+      <IcoRefresh />
+    </button>
+  );
+}
+ 
+// ════════════════════════════════════════════════════════════════════════════
+// ── PROFILE MODAL（個人資料／成員管理）────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+const EDGE_FN_URL = `${SUPABASE_URL}/functions/v1/admin-reset-password`;
+ 
+function ProfileModal({ session, isAdmin, myName, myBranch, onClose, onUpdated, setToast }) {
+  const [view, setView] = useState("profile"); // profile | members
+  const [fullName, setFullName] = useState(myName);
+  const [branch, setBranch] = useState(myBranch);
+  const [email, setEmail] = useState(session.user.email || "");
+  const [showPwd, setShowPwd] = useState(false);
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+ 
+  const [members, setMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [resetTarget, setResetTarget] = useState(null);
+  const [resetBusy, setResetBusy] = useState(false);
+ 
+  // 統一呼叫 Edge Function 的小工具
+  async function callAdminFn(payload) {
+    const { data, error } = await sb.functions.invoke("admin-reset-password", {
+      body: payload,
+    });
+    if (error) {
+      // FunctionsHttpError 等情況，嘗試取得伺服器回傳的實際錯誤訊息
+      let msg = error.message || "操作失敗";
+      try {
+        const ctx = error.context;
+        if (ctx && typeof ctx.json === "function") {
+          const body = await ctx.json();
+          if (body?.error) msg = body.error;
+        }
+      } catch {}
+      throw new Error(msg);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+ 
+  async function loadMembers() {
+    setMembersLoading(true);
+    try {
+      const result = await sb.functions.invoke("admin-reset-password", {
+        body: { action: "list_members" },
+      });
+      if (result.error) {
+        let msg = result.error.message || JSON.stringify(result.error);
+        try {
+          const ctx = result.error.context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {}
+        setToast("❌ 錯誤：" + msg);
+        setMembersLoading(false);
+        return;
+      }
+      setMembers(result.data?.members || []);
+    } catch (e) {
+      setToast("❌ 例外：" + String(e));
+    }
+    setMembersLoading(false);
+  }
+ 
+  useEffect(() => {
+    if (view === "members") loadMembers();
+  }, [view]);
+ 
+  async function saveProfile() {
+    setErr(""); setMsg("");
+    if (!fullName.trim()) { setErr("姓名不可為空"); return; }
+    setBusy(true);
+    const { error } = await sb.from("profiles").update({
+      full_name: fullName.trim(),
+      branch: branch,
+    }).eq("id", session.user.id);
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg("已更新！");
+    onUpdated({ full_name: fullName.trim(), branch });
+  }
+ 
+  async function saveEmail() {
+    setErr(""); setMsg("");
+    if (!email.trim() || email.trim() === session.user.email) { setErr("請輸入新的 Email"); return; }
+    setBusy(true);
+    const { error } = await sb.auth.updateUser(
+      { email: email.trim() },
+      { emailRedirectTo: window.location.origin + window.location.pathname }
+    );
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg("驗證信已寄出，請至新信箱完成驗證後 Email 才會更新。");
+  }
+ 
+  async function savePassword() {
+    setErr(""); setMsg("");
+    if (!currentPwd) { setErr("請輸入目前密碼"); return; }
+    if (!newPwd || newPwd.length < 6) { setErr("新密碼至少需要 6 個字元"); return; }
+    setBusy(true);
+    // 用目前密碼重新驗證身份
+    const { error: verifyErr } = await sb.auth.signInWithPassword({ email: session.user.email, password: currentPwd });
+    if (verifyErr) {
+      setBusy(false);
+      setErr("目前密碼不正確");
+      return;
+    }
+    const { error } = await sb.auth.updateUser({ password: newPwd });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg("密碼已更新！");
+    setCurrentPwd(""); setNewPwd("");
+  }
+ 
+  async function handleResetMemberPassword(member) {
+    setResetBusy(true);
+    try {
+      await callAdminFn({ action: "reset_password", target_user_id: member.id });
+      setToast(`已將「${member.full_name || "該成員"}」的密碼重設為 000000`);
+    } catch (e) {
+      setToast(e.message || "重設失敗，請check網路連線");
+    }
+    setResetBusy(false);
+    setResetTarget(null);
+  }
+ 
+  async function updateMemberBranch(memberId, newBranch) {
+    // 先樂觀更新畫面，失敗再復原，介面反應比較快
+    const prevMembers = members;
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, branch: newBranch } : m));
+    try {
+      await callAdminFn({ action: "update_branch", target_user_id: memberId, branch: newBranch });
+      setToast("分院已更新");
+    } catch (e) {
+      setMembers(prevMembers);
+      setToast(e.message || "分院更新失敗");
+    }
+  }
+ 
+  return (
+    <Modal title={view === "members" ? "成員管理" : "個人資料"} onClose={onClose}>
+      {isAdmin && (
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          <button onClick={() => setView("profile")}
+            style={{ flex:1, background: view === "profile" ? C.primary : C.light, color: view === "profile" ? "#fff" : C.text, border:"none", borderRadius:10, padding:"9px 0", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+            我的資料
+          </button>
+          <button onClick={() => setView("members")}
+            style={{ flex:1, background: view === "members" ? C.primary : C.light, color: view === "members" ? "#fff" : C.text, border:"none", borderRadius:10, padding:"9px 0", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+            成員管理
+          </button>
+        </div>
+      )}
+ 
+      {view === "profile" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>姓名</div>
+            <div style={{ display:"flex", gap:8 }}>
+              <input style={inputStyle} value={fullName} onChange={e => setFullName(e.target.value)} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>目前分院</div>
+            <div style={{ position:"relative" }}>
+              <select value={branch} onChange={e => setBranch(e.target.value)}
+                style={{ ...inputStyle, appearance:"none", paddingRight:32 }}>
+                {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
+              <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:C.sub, fontSize:11 }}>▼</span>
+            </div>
+          </div>
+          <button onClick={saveProfile} disabled={busy} style={{ ...btnPrimary, background:C.addBtn, opacity: busy ? 0.6 : 1 }}>{busy ? "儲存中…" : "儲存姓名與分院"}</button>
+ 
+          <div style={{ height:1, background:C.border, margin:"4px 0" }} />
+ 
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>Email</div>
+            <input style={inputStyle} type="email" value={email} onChange={e => setEmail(e.target.value)} />
+          </div>
+          <button onClick={saveEmail} disabled={busy} style={{ ...btnPrimary, background:C.accent, opacity: busy ? 0.6 : 1 }}>{busy ? "處理中…" : "更新 Email（需驗證）"}</button>
+ 
+          <div style={{ height:1, background:C.border, margin:"4px 0" }} />
+ 
+          <div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>密碼</div>
+            {!showPwd ? (
+              <button onClick={() => setShowPwd(true)} style={{ ...inputStyle, textAlign:"left", cursor:"pointer", color:C.sub, background:C.bg }}>
+                •••••• <span style={{ fontSize:12, color:C.primary, marginLeft:8 }}>點擊修改</span>
+              </button>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <input style={inputStyle} type="password" placeholder="目前密碼" value={currentPwd} onChange={e => setCurrentPwd(e.target.value)} />
+                <input style={inputStyle} type="password" placeholder="新密碼（至少 6 個字元）" value={newPwd} onChange={e => setNewPwd(e.target.value)} />
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => { setShowPwd(false); setCurrentPwd(""); setNewPwd(""); setErr(""); }} style={{ flex:1, background:C.light, border:"none", borderRadius:10, padding:"11px 0", fontSize:14, color:C.text, cursor:"pointer", fontFamily:"inherit" }}>取消</button>
+                  <button onClick={savePassword} disabled={busy} style={{ flex:1, ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "更新中…" : "更新密碼"}</button>
+                </div>
+              </div>
+            )}
+          </div>
+ 
+          {err && <div style={{ color:C.danger, fontSize:13, fontWeight:600 }}>{err}</div>}
+          {msg && <div style={{ color:C.addBtn, fontSize:13, fontWeight:600 }}>{msg}</div>}
+        </div>
+      )}
+ 
+      {view === "members" && isAdmin && (
+        <div>
+          {membersLoading && <div style={{ textAlign:"center", color:C.sub, padding:"20px 0" }}>載入中…</div>}
+          {!membersLoading && (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {members.map((m, idx) => (
+                <div key={m.id} style={{ background: idx % 2 === 0 ? C.rowA : C.rowB, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                    <div>
+                      <div style={{ fontWeight:700, fontSize:14, color:C.text }}>{m.full_name || "（未設定姓名）"}{m.role === "admin" ? " 👑" : ""}</div>
+                      <div style={{ fontSize:11, color:C.sub, marginTop:2 }}>{m.email}</div>
+                      <div style={{ fontSize:11, color:C.sub, marginTop:2 }}>密碼：••••••</div>
+                    </div>
+                    <button onClick={() => setResetTarget(m)} style={{ background:"#FEF2F2", border:"none", borderRadius:8, padding:"7px 12px", fontSize:12, color:C.danger, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+                      重設密碼
+                    </button>
+                  </div>
+                  <div style={{ position:"relative" }}>
+                    <select value={m.branch || "內湖"} onChange={e => updateMemberBranch(m.id, e.target.value)}
+                      style={{ width:"100%", boxSizing:"border-box", appearance:"none", background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, padding:"7px 28px 7px 10px", fontSize:13, color:C.text, cursor:"pointer", fontFamily:"inherit" }}>
+                      {BRANCHES.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                    <span style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:C.sub, fontSize:10 }}>▼</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+ 
+      {resetTarget && (
+        <div style={{ position:"fixed", inset:0, zIndex:250, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", padding:24 }} onClick={() => setResetTarget(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:16, padding:"22px 20px", width:"100%", maxWidth:320 }}>
+            <div style={{ textAlign:"center", fontSize:15, color:C.text, marginBottom:6 }}>確定要重設</div>
+            <div style={{ textAlign:"center", fontSize:17, fontWeight:700, color:C.danger, marginBottom:10 }}>「{resetTarget.full_name || "該成員"}」的密碼？</div>
+            <div style={{ textAlign:"center", fontSize:13, color:C.sub, marginBottom:18 }}>密碼將重設為 000000，該成員下次登入需強制設定新密碼</div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => setResetTarget(null)} style={{ flex:1, background:C.light, border:"none", borderRadius:10, padding:"12px", fontSize:14, cursor:"pointer", fontFamily:"inherit", color:C.text, fontWeight:600 }}>取消</button>
+              <button onClick={() => handleResetMemberPassword(resetTarget)} disabled={resetBusy} style={{ flex:1, background:C.danger, border:"none", borderRadius:10, padding:"12px", fontSize:14, cursor:"pointer", fontFamily:"inherit", color:"#fff", fontWeight:700, opacity: resetBusy ? 0.6 : 1 }}>{resetBusy ? "處理中…" : "確定重設"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+ 
+// ════════════════════════════════════════════════════════════════════════════
+// ── FORCE CHANGE PASSWORD SCREEN（被管理員重設密碼後強制改密碼）─────────────
+// ════════════════════════════════════════════════════════════════════════════
+function ForceChangePasswordScreen({ onDone }) {
+  const [newPwd, setNewPwd] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+ 
+  async function handleSubmit() {
+    setErr("");
+    if (!newPwd || newPwd.length < 6) { setErr("密碼至少需要 6 個字元"); return; }
+    if (newPwd === "000000") { setErr("請設定一組不是 000000 的新密碼"); return; }
+    setBusy(true);
+    const { data: { session } } = await sb.auth.getSession();
+    const { error: pwdErr } = await sb.auth.updateUser({ password: newPwd });
+    if (pwdErr) { setBusy(false); setErr(pwdErr.message); return; }
+    const { error: flagErr } = await sb.from("profiles").update({ must_change_password: false }).eq("id", session.user.id);
+    setBusy(false);
+    if (flagErr) { setErr(flagErr.message); return; }
+    onDone();
+  }
+ 
+  return (
+    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.bg, padding:"24px" }}>
+      <div style={{ fontSize:36, marginBottom:10 }}>🔑</div>
+      <div style={{ width:"100%", maxWidth:340, background:C.surface, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}` }}>
+        <div style={{ textAlign:"center", fontWeight:700, fontSize:17, color:C.text, marginBottom:8 }}>請設定新密碼</div>
+        <div style={{ textAlign:"center", fontSize:13, color:C.sub, marginBottom:18 }}>您的密碼已被管理員重設，請設定一組新密碼後繼續使用</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <input style={inputStyle} type="password" placeholder="新密碼（至少 6 個字元）" value={newPwd}
+            onChange={e => setNewPwd(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }} />
+          {err && <div style={{ color:C.danger, fontSize:13, fontWeight:600 }}>{err}</div>}
+          <button onClick={handleSubmit} disabled={busy} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "更新中…" : "設定新密碼並繼續"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+ 
+// ════════════════════════════════════════════════════════════════════════════
+// ── AUTH SCREEN ───────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+function AuthScreen({ onAuthed, forceRecovery, onRecoveryDone }) {
+  const [mode, setMode] = useState(forceRecovery ? "recovery" : "login"); // login | signup | reset | recovery
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+ 
+  // 偵測網址是否帶有 Supabase 重設密碼的 recovery 參數
+  // （使用者點擊重設密碼信件裡的連結後，會被導回網站並帶這個參數）
+  useEffect(() => {
+    if (forceRecovery) { setMode("recovery"); return; }
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    if (hash.includes("type=recovery") || search.includes("type=recovery")) {
+      setMode("recovery");
+    }
+    const sub = sb.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setMode("recovery");
+    });
+    return () => sub.data.subscription.unsubscribe();
+  }, []);
+ 
+  async function handleLogin() {
+    setErr(""); setMsg("");
+    if (!email.trim() || !password) { setErr("請輸入帳號與密碼"); return; }
+    setBusy(true);
+    const { data, error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
+    setBusy(false);
+    if (error) { setErr(error.message === "Invalid login credentials" ? "帳號或密碼錯誤" : error.message); return; }
+    onAuthed(data.session);
+  }
+ 
+  async function handleSignup() {
+    setErr(""); setMsg("");
+    if (!fullName.trim()) { setErr("請輸入姓名"); return; }
+    if (!email.trim() || !password) { setErr("請輸入帳號與密碼"); return; }
+    if (password.length < 6) { setErr("密碼至少需要 6 個字元"); return; }
+    setBusy(true);
+    const { data, error } = await sb.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: { full_name: fullName.trim() },
+        emailRedirectTo: window.location.origin + window.location.pathname,
+      }
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    // 新帳號的 profiles 紀錄由資料庫觸發器（handle_new_user）自動建立，
+    // 觸發器會讀取上面傳的 full_name metadata 寫入 profiles.full_name
+    if (data.session) {
+      onAuthed(data.session);
+    } else {
+      setMsg("註冊成功！請check您的 email 完成驗證後再登入。");
+      setMode("login");
+    }
+  }
+ 
+  async function handleReset() {
+    setErr(""); setMsg("");
+    if (!email.trim()) { setErr("請輸入您的 email"); return; }
+    setBusy(true);
+    const { error } = await sb.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin + window.location.pathname,
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setMsg("重設密碼信件已寄出，請check您的 email。");
+  }
+ 
+  async function handleSetNewPassword() {
+    setErr(""); setMsg("");
+    if (!newPassword || newPassword.length < 6) { setErr("密碼至少需要 6 個字元"); return; }
+    setBusy(true);
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) { setBusy(false); setErr(error.message); return; }
+    // 重設密碼後也順手清除 must_change_password 旗標（如果有的話）
+    const { data: { user } } = await sb.auth.getUser();
+    if (user) {
+      await sb.from("profiles").update({ must_change_password: false }).eq("id", user.id);
+    }
+    await sb.auth.signOut();
+    setBusy(false);
+    setMsg("密碼已更新！請重新登入。");
+    setNewPassword("");
+    setTimeout(() => {
+      if (onRecoveryDone) onRecoveryDone();
+      else { setMode("login"); }
+    }, 1200);
+  }
+ 
+  return (
+    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.bg, padding:"24px" }}>
+      <img src="https://www.jinhetcm.com.tw/images/_tw/logo.png" alt="錦禾中醫" style={{ height:56, marginBottom:10, objectFit:"contain" }} />
+      <div style={{ fontWeight:800, fontSize:21, color:C.header, marginBottom:28 }}>錦禾倉庫叫貨</div>
+ 
+      <div style={{ width:"100%", maxWidth:340, background:C.surface, borderRadius:16, padding:"24px 20px", border:`1px solid ${C.border}` }}>
+ 
+        {mode === "recovery" ? (
+          <>
+            <div style={{ textAlign:"center", fontWeight:700, fontSize:19, color:C.text, marginBottom:18 }}>設定新密碼</div>
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>新密碼</div>
+                <input style={inputStyle} type="password" placeholder="至少 6 個字元" value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") handleSetNewPassword(); }} />
+              </div>
+              {err && <div style={{ color:C.danger, fontSize:13, fontWeight:600 }}>{err}</div>}
+              {msg && <div style={{ color:C.addBtn, fontSize:13, fontWeight:600 }}>{msg}</div>}
+              <button disabled={busy} onClick={handleSetNewPassword} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "更新中…" : "更新密碼"}</button>
+            </div>
+          </>
+        ) : (
+          <>
+            {mode !== "login" && (
+              <div style={{ textAlign:"center", fontWeight:700, fontSize:19, color:C.text, marginBottom:18 }}>
+                {mode === "signup" ? "註冊新帳號" : "重設密碼"}
+              </div>
+            )}
+ 
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              {mode === "signup" && (
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>姓名</div>
+                  <input style={inputStyle} placeholder="您的姓名" value={fullName} onChange={e => setFullName(e.target.value)} />
+                </div>
+              )}
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>Email</div>
+                <input style={inputStyle} type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+              </div>
+              {mode !== "reset" && (
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.sub, marginBottom:6 }}>密碼</div>
+                  <input style={inputStyle} type="password" placeholder="至少 6 個字元" value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") (mode === "login" ? handleLogin() : handleSignup()); }} />
+                </div>
+              )}
+ 
+              {err && <div style={{ color:C.danger, fontSize:13, fontWeight:600 }}>{err}</div>}
+              {msg && <div style={{ color:C.addBtn, fontSize:13, fontWeight:600 }}>{msg}</div>}
+ 
+              {mode === "login" && (
+                <button disabled={busy} onClick={handleLogin} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "登入中…" : "登入"}</button>
+              )}
+              {mode === "signup" && (
+                <button disabled={busy} onClick={handleSignup} style={{ ...btnPrimary, background:C.addBtn, opacity: busy ? 0.6 : 1 }}>{busy ? "註冊中…" : "註冊"}</button>
+              )}
+              {mode === "reset" && (
+                <button disabled={busy} onClick={handleReset} style={{ ...btnPrimary, opacity: busy ? 0.6 : 1 }}>{busy ? "寄送中…" : "寄送重設密碼信"}</button>
+              )}
+            </div>
+ 
+            <div style={{ display:"flex", justifyContent:"center", gap:14, marginTop:18, fontSize:13 }}>
+              {mode !== "login" && <button onClick={() => { setMode("login"); setErr(""); setMsg(""); }} style={{ background:"none", border:"none", color:C.primary, cursor:"pointer", fontWeight:600, fontFamily:"inherit" }}>登入</button>}
+              {mode !== "signup" && <button onClick={() => { setMode("signup"); setErr(""); setMsg(""); }} style={{ background:"none", border:"none", color:C.primary, cursor:"pointer", fontWeight:600, fontFamily:"inherit" }}>註冊帳號</button>}
+              {mode !== "reset" && <button onClick={() => { setMode("reset"); setErr(""); setMsg(""); }} style={{ background:"none", border:"none", color:C.sub, cursor:"pointer", fontFamily:"inherit" }}>忘記密碼</button>}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+ 
+// ════════════════════════════════════════════════════════════════════════════
+// ── MAIN APP ──────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 function App() {
-  const [products, setProducts] = useState(() => load(SK_PRODUCTS, DEFAULT_PRODUCTS));
-  const [zones,    setZones]    = useState(() => load(SK_ZONES, DEFAULT_ZONES));
-  const [orders,   setOrders]   = useState(() => load(SK_ORDERS, []));
+  const [session, setSession] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [myRole, setMyRole] = useState(null); // 'admin' | 'member' | null
+  const [myName, setMyName] = useState("");
+  const [myBranch, setMyBranch] = useState("內湖");
+ 
+  const [products, setProducts] = useState(() => localLoad(SK_PRODUCTS, DEFAULT_PRODUCTS));
+  const [zones,    setZones]    = useState(() => localLoad(SK_ZONES,    DEFAULT_ZONES));
+  const [orders,   setOrders]   = useState(() => localLoad(SK_ORDERS,   []));
   const [qty,      setQty]      = useState({});
   const [search,   setSearch]   = useState("");
+  const [historySearch, setHistorySearch] = useState("");
+  const [summaryDetail, setSummaryDetail] = useState(null);
   const [tab,      setTab]      = useState("order");
   const [toast,    setToast]    = useState("");
-
+ 
+  // cloud sync status
+  const [syncStatus, setSyncStatus] = useState("offline"); // syncing | synced | error | offline
+  const [isLoading,  setIsLoading]  = useState(true);
+ 
   // manage sub-state
-  const [manageView, setManageView] = useState("zones"); // zones | products
-  const [activeZone, setActiveZone] = useState(null);
-  const [dragId,     setDragId]     = useState(null);
+  const [manageView,  setManageView]  = useState("zones");
+  const [activeZone,  setActiveZone]  = useState(null);
   const [longPressId, setLongPressId] = useState(null);
   const longPressTimer = useRef(null);
-
+ 
   // modals
-  const [showExport,   setShowExport]   = useState(false);
-  const [showAdd,      setShowAdd]      = useState(false);
-  const [editItem,     setEditItem]     = useState(null);
-  const [deleteItem,   setDeleteItem]   = useState(null);
-  const [showOrderDetail, setShowOrderDetail] = useState(null);
-  const [showAddZone,  setShowAddZone]  = useState(false);
-  const [deleteZone,   setDeleteZone]   = useState(null);
-  const [editZone,     setEditZone]     = useState(null);
-
+  const [showExport,     setShowExport]     = useState(false);
+  const [showAdd,        setShowAdd]        = useState(false);
+  const [editItem,       setEditItem]       = useState(null);
+  const [deleteItem,     setDeleteItem]     = useState(null);
+  const [showOrderDetail,setShowOrderDetail]= useState(null);
+  const [showAddZone,    setShowAddZone]    = useState(false);
+  const [deleteZone,     setDeleteZone]     = useState(null);
+  const [editZone,       setEditZone]       = useState(null);
+  const [orderToDelete,  setOrderToDelete]  = useState(null);
+  const [orderToEdit,    setOrderToEdit]    = useState(null);
+  const [editingOrderItems, setEditingOrderItems] = useState([]);
+ 
   // forms
   const [form,     setForm]     = useState({ name:"", unit:"", note:"", zone:"A" });
   const [zoneForm, setZoneForm] = useState({ name:"" });
-
-  useEffect(() => save(SK_PRODUCTS, products), [products]);
-  useEffect(() => save(SK_ORDERS,   orders),   [orders]);
-  useEffect(() => save(SK_ZONES,    zones),    [zones]);
-
-  // ── Sorted products for ORDER tab (by zone order, then item order) ──────────
+ 
+  // 個人資料 / 成員管理
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+ 
+  const isAdmin = myRole === "admin";
+ 
+  // ── 監聽登入狀態 ──────────────────────────────────────────────────────────
+  // isRecoveryMode：使用者點擊「重設密碼信」裡的連結進來時，Supabase 會自動
+  // 建立一個暫時的 session，但這不代表使用者「正常登入」了 —— 必須先導向
+  // 設定新密碼的畫面，不能直接放行進主畫面。
+  const [isRecoveryMode, setIsRecoveryMode] = useState(() => {
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    return hash.includes("type=recovery") || search.includes("type=recovery");
+  });
+ 
+  useEffect(() => {
+    sb.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthChecked(true);
+    });
+    const { data: listener } = sb.auth.onAuthStateChange((event, sess) => {
+      if (event === "PASSWORD_RECOVERY") setIsRecoveryMode(true);
+      setSession(sess);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+ 
+  // ── 登入後查詢自己的角色、姓名、分院、是否需強制改密碼（讀取 profiles 表）──
+  useEffect(() => {
+    if (!session) { setMyRole(null); setMyName(""); setMyBranch("內湖"); setMustChangePassword(false); return; }
+    (async () => {
+      const { data, error } = await sb.from("profiles").select("role, full_name, branch, must_change_password").eq("id", session.user.id).maybeSingle();
+      if (!error && data) {
+        setMyRole(data.role || "member");
+        setMyName(data.full_name || "");
+        setMyBranch(data.branch || "內湖");
+        setMustChangePassword(!!data.must_change_password);
+      } else {
+        // 理論上註冊時觸發器就會自動建立，這裡只是保險措施
+        setMyRole("member");
+        setMyName("");
+        setMyBranch("內湖");
+        setMustChangePassword(false);
+      }
+    })();
+  }, [session]);
+ 
+  // ── 啟動 / 登入後 從 Supabase 載入資料 ──────────────────────────────────
+  const loadFromCloud = useCallback(async (silent) => {
+    if (!silent) setIsLoading(true);
+    setSyncStatus("syncing");
+    try {
+      const [cloudProducts, cloudZones, cloudOrders] = await Promise.all([
+        sbGet(SK_PRODUCTS),
+        sbGet(SK_ZONES),
+        sbGet(SK_ORDERS),
+      ]);
+ 
+      if (cloudProducts) { setProducts(cloudProducts); localSave(SK_PRODUCTS, cloudProducts); }
+      if (cloudZones)    { setZones(cloudZones);       localSave(SK_ZONES,    cloudZones); }
+      if (cloudOrders)   { setOrders(cloudOrders);     localSave(SK_ORDERS,   cloudOrders); }
+ 
+      setSyncStatus("synced");
+    } catch {
+      setSyncStatus("error");
+    } finally {
+      if (!silent) setIsLoading(false);
+    }
+  }, []);
+ 
+  useEffect(() => {
+    if (session) loadFromCloud(false);
+  }, [session, loadFromCloud]);
+ 
+  // ── 切到「管理品項」或「叫貨」分頁時，靜默重新拉取一次雲端資料 ─────────
+  // 這樣手機/電腦互相切換頁籤時，能看到對方剛新增/刪除的最新品項
+  useEffect(() => {
+    if (session && (tab === "manage" || tab === "order")) {
+      loadFromCloud(true);
+    }
+  }, [tab, session, loadFromCloud]);
+ 
+  // ── 每 30 秒背景自動同步一次（多人同時使用時降低看到舊資料的機率）──────
+  useEffect(() => {
+    if (!session) return;
+    const t = setInterval(() => loadFromCloud(true), 30000);
+    return () => clearInterval(t);
+  }, [session, loadFromCloud]);
+ 
+  // ── 資料變動時同步到 Supabase + localStorage ──────────────────────────────
+  const syncTimeouts = useRef({});
+ 
+  function debouncedSync(key, value) {
+    localSave(key, value);
+    clearTimeout(syncTimeouts.current[key]);
+    setSyncStatus("syncing");
+    syncTimeouts.current[key] = setTimeout(async () => {
+      const ok = await sbSet(key, value);
+      setSyncStatus(ok ? "synced" : "error");
+    }, 500);
+  }
+ 
+  function updateProducts(updater) {
+    setProducts(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      debouncedSync(SK_PRODUCTS, next);
+      return next;
+    });
+  }
+  function updateZones(updater) {
+    setZones(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      debouncedSync(SK_ZONES, next);
+      return next;
+    });
+  }
+  function updateOrders(updater) {
+    setOrders(prev => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      debouncedSync(SK_ORDERS, next);
+      return next;
+    });
+  }
+ 
+  // ── Sorted products ───────────────────────────────────────────────────────
   const orderedProducts = useMemo(() => {
     const zoneOrder = zones.map(z => z.id);
     return [...products].sort((a, b) => {
@@ -245,55 +953,102 @@ function App() {
       return (a.order || 0) - (b.order || 0);
     });
   }, [products, zones]);
-
+ 
   const filteredProducts = useMemo(() =>
     orderedProducts.filter(p => p.name.includes(search)),
     [orderedProducts, search]
   );
-
+ 
   const selectedItems = useMemo(() =>
     orderedProducts.filter(p => qty[p.id] > 0).map(p => ({ ...p, qty: qty[p.id] })),
     [orderedProducts, qty]
   );
-
+ 
   const exportText = useMemo(() =>
-    selectedItems.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
-    [selectedItems]
+    `${myBranch}叫貨\n` + selectedItems.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
+    [selectedItems, myBranch]
   );
-
-  // Products in active zone for manage tab
+ 
   const zoneProducts = useMemo(() => {
     if (!activeZone) return [];
     return products
       .filter(p => p.zone === activeZone)
       .sort((a, b) => (a.order || 0) - (b.order || 0));
   }, [products, activeZone]);
-
-  // ── Order submit ──────────────────────────────────────────────────────────────
+ 
+  // ── 管理員：當月所有分院叫貨加總 ─────────────────────────────────────────
+  const currentMonthLabel = useMemo(() => `${new Date().getMonth() + 1}月`, []);
+ 
+  const monthlySummary = useMemo(() => {
+    const thisMonthOrders = orders.filter(o => o.monthLabel === currentMonthLabel);
+    const map = {}; // name -> { name, unit, qty, branches: { branchName: qty } }
+    thisMonthOrders.forEach(o => {
+      const branchName = o.branch || "內湖";
+      o.items.forEach(item => {
+        if (!map[item.name]) map[item.name] = { name: item.name, unit: item.unit, qty: 0, branches: {} };
+        map[item.name].qty += item.qty;
+        map[item.name].branches[branchName] = (map[item.name].branches[branchName] || 0) + item.qty;
+      });
+    });
+    return Object.values(map).sort((a, b) => a.name.localeCompare(b.name, "zh-TW"));
+  }, [orders, currentMonthLabel]);
+ 
+  const monthlySummaryText = useMemo(() =>
+    `${currentMonthLabel}叫貨\n` + monthlySummary.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
+    [monthlySummary, currentMonthLabel]
+  );
+ 
+  // ── Order submit ──────────────────────────────────────────────────────────
   function handleSubmitOrder() {
     if (selectedItems.length === 0) { setToast("請先選擇品項數量"); return; }
     const now = new Date();
-    const monthLabel = `${now.getMonth() + 1}月`;
-    const id = genOrderId(orders);
+    const month = now.getMonth() + 1;
+    const monthLabel = `${month}月`;
+    const id = genOrderId(orders, myBranch, month);
     const order = {
-      id,
-      monthLabel,
+      id, monthLabel, branch: myBranch,
       time: now.toLocaleString("zh-TW", { hour12: false }),
       items: selectedItems.map(i => ({ name: i.name, qty: i.qty, unit: i.unit })),
     };
-    setOrders(prev => [order, ...prev]);
+    updateOrders(prev => [order, ...prev]);
     setQty({});
     setShowExport(false);
-    setToast("叫貨單已儲存！");
+    setToast("叫貨單已儲存並同步！");
   }
-
+ 
   function handleCopyExport() {
-    if (exportText) {
-      navigator.clipboard.writeText(exportText).then(() => setToast("已複製到剪貼簿！")).catch(() => setToast("請手動複製"));
-    }
+    if (exportText) { copyTextToClipboard(exportText); setToast("已複製到剪貼簿！"); }
   }
-
-  // ── Product CRUD ──────────────────────────────────────────────────────────────
+ 
+  // ── History Order Actions ─────────────────────────────────────────────────
+  function handleOpenEditOrder(order) {
+    setOrderToEdit(order);
+    setEditingOrderItems(JSON.parse(JSON.stringify(order.items)));
+  }
+ 
+  function handleUpdateOrderItemQty(index, newQty) {
+    setEditingOrderItems(prev => prev.map((item, i) => i === index ? { ...item, qty: newQty } : item));
+  }
+ 
+  function handleSaveEditOrder() {
+    const finalItems = editingOrderItems.filter(item => item.qty > 0);
+    if (finalItems.length === 0) { setToast("品項數量不可全部為0，如不需此單請直接刪除"); return; }
+    updateOrders(prev => prev.map(o =>
+      (o.id === orderToEdit.id && o.time === orderToEdit.time) ? { ...o, items: finalItems } : o
+    ));
+    setOrderToEdit(null);
+    setToast("訂單內容已更新！");
+  }
+ 
+  function handleDeleteOrder() {
+    if (!isAdmin) { setToast("僅管理員可刪除訂單"); setOrderToDelete(null); return; }
+    updateOrders(prev => prev.filter(o => !(o.id === orderToDelete.id && o.time === orderToDelete.time)));
+    if (showOrderDetail === (orderToDelete.id + orderToDelete.time)) setShowOrderDetail(null);
+    setOrderToDelete(null);
+    setToast("訂單已刪除！");
+  }
+ 
+  // ── Product CRUD ──────────────────────────────────────────────────────────
   function openAdd() {
     const defaultZone = activeZone || (zones[0]?.id || "A");
     setForm({ name:"", unit:"", note:"", zone: defaultZone });
@@ -303,120 +1058,146 @@ function App() {
     setForm({ name: p.name, unit: p.unit, note: p.note, zone: p.zone || zones[0]?.id || "A" });
     setEditItem(p);
   }
-
+ 
   function saveAdd() {
     if (!form.name.trim()) { setToast("請輸入品名"); return; }
     const zoneProds = products.filter(p => p.zone === form.zone);
     const maxOrder = zoneProds.reduce((m, p) => Math.max(m, p.order || 0), 0);
     const newP = { id: Date.now(), name: form.name.trim(), unit: form.unit.trim(), note: form.note.trim(), zone: form.zone, order: maxOrder + 1 };
-    setProducts(prev => [...prev, newP]);
+    updateProducts(prev => [...prev, newP]);
     setShowAdd(false);
-    setToast("品項已新增！");
+    setToast("品項已新增並同步！");
   }
-
+ 
   function saveEdit() {
     if (!form.name.trim()) { setToast("請輸入品名"); return; }
-    setProducts(prev => prev.map(p => p.id === editItem.id
+    updateProducts(prev => prev.map(p => p.id === editItem.id
       ? { ...p, name: form.name.trim(), unit: form.unit.trim(), note: form.note.trim(), zone: form.zone }
       : p
     ));
     setEditItem(null);
-    setToast("已更新！");
+    setToast("已更新並同步！");
   }
-
+ 
   function confirmDelete() {
-    setProducts(prev => prev.filter(p => p.id !== deleteItem.id));
+    if (!isAdmin) { setToast("僅管理員可刪除品項"); setDeleteItem(null); return; }
+    updateProducts(prev => prev.filter(p => p.id !== deleteItem.id));
     setQty(prev => { const n = { ...prev }; delete n[deleteItem.id]; return n; });
     setDeleteItem(null);
-    setToast("已刪除");
+    setToast("已刪除！");
   }
-
-  // ── Reorder within zone ───────────────────────────────────────────────────────
+ 
   function moveItem(id, dir) {
-    const zProds = [...zoneProducts];
+    // 先取得目前這個區域的品項，用 order 排序（加 id 作為第二排序鍵，確保穩定）
+    const zProds = [...zoneProducts].sort((a, b) =>
+      (a.order || 0) - (b.order || 0) || a.id - b.id
+    );
     const idx = zProds.findIndex(p => p.id === id);
     if (idx < 0) return;
     const swapIdx = idx + dir;
     if (swapIdx < 0 || swapIdx >= zProds.length) return;
-    const newOrder = zProds[idx].order;
-    const swapOrder = zProds[swapIdx].order;
-    setProducts(prev => prev.map(p => {
-      if (p.id === zProds[idx].id) return { ...p, order: swapOrder };
-      if (p.id === zProds[swapIdx].id) return { ...p, order: newOrder };
-      return p;
-    }));
+ 
+    // 在陣列裡直接交換兩個元素的位置
+    const reordered = [...zProds];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+ 
+    // 重新指派 order 為連續整數（1, 2, 3...），消除任何重複或混亂的 order 值
+    const orderMap = {};
+    reordered.forEach((p, i) => { orderMap[p.id] = i + 1; });
+ 
+    updateProducts(prev => prev.map(p =>
+      orderMap[p.id] !== undefined ? { ...p, order: orderMap[p.id] } : p
+    ));
   }
-
-  // ── Drag reorder ──────────────────────────────────────────────────────────────
-  function handleDragStart(id) { setDragId(id); }
-  function handleDragOver(e, id) {
-    e.preventDefault();
-    if (dragId === null || dragId === id) return;
-    const from = zoneProducts.findIndex(p => p.id === dragId);
-    const to   = zoneProducts.findIndex(p => p.id === id);
-    if (from < 0 || to < 0) return;
-    const reordered = [...zoneProducts];
-    const [moved] = reordered.splice(from, 1);
-    reordered.splice(to, 0, moved);
-    const updated = reordered.map((p, i) => ({ ...p, order: i + 1 }));
-    setProducts(prev => prev.map(p => {
-      const u = updated.find(u => u.id === p.id);
-      return u ? u : p;
-    }));
-    setDragId(id);
-  }
-  function handleDragEnd() { setDragId(null); }
-
-  // ── Long press (touch) ────────────────────────────────────────────────────────
+ 
   function handleTouchStart(id) {
-    longPressTimer.current = setTimeout(() => {
-      setLongPressId(id);
-    }, 500);
+    longPressTimer.current = setTimeout(() => setLongPressId(id), 500);
   }
-  function handleTouchEnd() {
-    clearTimeout(longPressTimer.current);
-  }
-
-  // ── Zone CRUD ──────────────────────────────────────────────────────────────────
+  function handleTouchEnd() { clearTimeout(longPressTimer.current); }
+ 
+  // ── Zone CRUD ──────────────────────────────────────────────────────────────
   function saveAddZone() {
     if (!zoneForm.name.trim()) { setToast("請輸入區域名稱"); return; }
     const id = Date.now().toString(36).toUpperCase().slice(-3);
-    setZones(prev => [...prev, { id, name: zoneForm.name.trim() }]);
+    updateZones(prev => [...prev, { id, name: zoneForm.name.trim() }]);
     setZoneForm({ name: "" });
     setShowAddZone(false);
     setToast("區域已新增！");
   }
-
+ 
   function confirmDeleteZone() {
+    if (!isAdmin) { setToast("僅管理員可刪除區域"); setDeleteZone(null); return; }
     const zid = deleteZone.id;
-    // move products in deleted zone to first remaining zone
     const remaining = zones.filter(z => z.id !== zid);
     const fallback = remaining[0]?.id || null;
-    if (fallback) {
-      setProducts(prev => prev.map(p => p.zone === zid ? { ...p, zone: fallback } : p));
-    }
-    setZones(remaining);
+    if (fallback) updateProducts(prev => prev.map(p => p.zone === zid ? { ...p, zone: fallback } : p));
+    updateZones(remaining);
     setDeleteZone(null);
-    setToast("區域已刪除");
+    setToast("區域已刪除！");
     if (activeZone === zid) setActiveZone(null);
   }
-
+ 
   function saveEditZone() {
     if (!zoneForm.name.trim()) { setToast("請輸入區域名稱"); return; }
-    setZones(prev => prev.map(z => z.id === editZone.id ? { ...z, name: zoneForm.name.trim() } : z));
+    updateZones(prev => prev.map(z => z.id === editZone.id ? { ...z, name: zoneForm.name.trim() } : z));
     setEditZone(null);
     setToast("已更新！");
   }
-
+ 
+  async function handleLogout() {
+    await sb.auth.signOut();
+    setSession(null);
+    setMyRole(null);
+    setTab("order");
+  }
+ 
   const tabBar = [
-    { key:"order",   label:"叫貨",    icon:<IcoList /> },
-    { key:"history", label:"紀錄",    icon:<IcoHistory /> },
+    { key:"order",   label:"叫貨",   icon:<IcoList /> },
+    { key:"history", label:"紀錄",   icon:<IcoHistory /> },
     { key:"manage",  label:"管理品項", icon:<IcoSettings /> },
+    ...(isAdmin ? [{ key:"summary", label:"總覽", icon:<IcoChart /> }] : []),
   ];
-
+ 
+  // ── 尚未確認登入狀態：顯示空白避免畫面閃爍 ──────────────────────────────
+  if (!authChecked) {
+    return <div style={{ minHeight:"100vh", background:C.bg }} />;
+  }
+ 
+  // ── 重設密碼連結點進來：強制走「設定新密碼」流程，不可直接放行進主畫面 ──
+  if (isRecoveryMode) {
+    return <AuthScreen onAuthed={setSession} forceRecovery onRecoveryDone={() => {
+      setIsRecoveryMode(false);
+      setSession(null);
+      window.history.replaceState(null, "", window.location.pathname);
+    }} />;
+  }
+ 
+  // ── 未登入：顯示登入畫面 ─────────────────────────────────────────────────
+  if (!session) {
+    return <AuthScreen onAuthed={setSession} />;
+  }
+ 
+  // ── Loading screen ────────────────────────────────────────────────────────
+  if (isLoading || myRole === null) {
+    return (
+      <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:C.bg, gap:16 }}>
+        <div style={{ fontSize:40 }}>🏥</div>
+        <div style={{ fontWeight:800, fontSize:20, color:C.header }}>錦禾倉庫叫貨</div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, color:C.sub, fontSize:14 }}>
+          <span className="spin"><IcoSync /></span> 從雲端載入資料中…
+        </div>
+      </div>
+    );
+  }
+ 
+  // ── 帳號被管理員重設密碼後，強制要求設定新密碼才能繼續使用 ──────────────
+  if (mustChangePassword) {
+    return <ForceChangePasswordScreen onDone={() => setMustChangePassword(false)} />;
+  }
+ 
   return (
     <div style={{ fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif", background:C.bg, minHeight:"100vh", maxWidth:480, margin:"0 auto" }}>
-
+ 
       {/* ── HEADER ── */}
       <div style={{ background:C.header, color:"#fff", padding:"14px 18px 12px", position:"sticky", top:0, zIndex:100, boxShadow:"0 2px 10px rgba(0,0,0,0.15)" }}>
         {tab === "manage" && manageView === "products" ? (
@@ -425,15 +1206,30 @@ function App() {
             <span style={{ fontWeight:800, fontSize:17 }}>{zones.find(z=>z.id===activeZone)?.name} 品項</span>
           </div>
         ) : (
-          <div style={{ fontSize:18, fontWeight:800, letterSpacing:"0.04em" }}>🏥 錦禾中醫叫貨系統</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ fontSize:18, fontWeight:800, letterSpacing:"0.04em" }}>🏥 錦禾倉庫叫貨</div>
+            <SyncBadge status={syncStatus} onRefresh={() => loadFromCloud(true)} />
+          </div>
         )}
-        {tab === "order" && (
-          <div style={{ fontSize:12, color:"rgba(255,255,255,0.7)", marginTop:2 }}>
-            已選 {selectedItems.length} 項 · 共 {selectedItems.reduce((s,i)=>s+i.qty,0)} 件
+        {!(tab === "manage" && manageView === "products") && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:4 }}>
+            <div style={{ fontSize:12, color:"rgba(255,255,255,0.7)" }}>
+              {tab === "order"
+                ? `已選 ${selectedItems.length} 項 · 共 ${selectedItems.reduce((s,i)=>s+i.qty,0)} 件`
+                : "\u00A0"}
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <button onClick={() => setShowProfile(true)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.75)", cursor:"pointer", display:"flex", alignItems:"center", gap:3, fontSize:10, padding:0, fontFamily:"inherit" }}>
+                <IcoUser /> {myName || (isAdmin ? "管理員" : "成員")}
+              </button>
+              <button onClick={handleLogout} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.75)", cursor:"pointer", display:"flex", alignItems:"center", gap:3, fontSize:10, padding:0, fontFamily:"inherit" }}>
+                <IcoLogout /> 登出
+              </button>
+            </div>
           </div>
         )}
       </div>
-
+ 
       {/* ══════════════ ORDER TAB ══════════════ */}
       {tab === "order" && (
         <div style={{ paddingBottom:110 }}>
@@ -445,14 +1241,13 @@ function App() {
               {search && <button onClick={() => setSearch("")} style={{ background:"none", border:"none", color:C.sub, cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>}
             </div>
           </div>
-
+ 
           <div style={{ padding:"4px 16px", display:"flex", flexDirection:"column", gap:8 }}>
             {filteredProducts.length === 0 && (
               <div style={{ textAlign:"center", color:C.sub, padding:"48px 0" }}>找不到符合品項</div>
             )}
             {(() => {
-              let lastZone = null;
-              let rowIdx = 0;
+              let lastZone = null; let rowIdx = 0;
               return filteredProducts.map(p => {
                 const showZoneLabel = p.zone !== lastZone;
                 if (showZoneLabel) { lastZone = p.zone; rowIdx = 0; }
@@ -473,8 +1268,7 @@ function App() {
                         <div style={{ fontWeight:600, fontSize:15, color:C.text }}>{p.name}</div>
                         {p.note && (
                           <div style={{ display:"flex", alignItems:"center", gap:4, marginTop:3 }}>
-                            <span style={{ color:C.accent }}><IcoInfo /></span>
-                            <span style={{ fontSize:12, color:C.accent, fontWeight:500 }}>{p.note}</span>
+                            <span style={{ fontSize:12, color:C.accent, fontWeight:500 }}>📌 {p.note}</span>
                           </div>
                         )}
                       </div>
@@ -496,7 +1290,7 @@ function App() {
               });
             })()}
           </div>
-
+ 
           {selectedItems.length > 0 && (
             <div style={{ position:"fixed", bottom:66, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, padding:"10px 16px", background:`linear-gradient(to top, ${C.bg} 60%, transparent)` }}>
               <button onClick={() => setShowExport(true)} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
@@ -506,14 +1300,23 @@ function App() {
           )}
         </div>
       )}
-
+ 
       {/* ══════════════ HISTORY TAB ══════════════ */}
       {tab === "history" && (
         <div style={{ padding:"14px 16px 90px", display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ background:C.surface, borderRadius:12, display:"flex", alignItems:"center", padding:"9px 14px", gap:8, border:`1px solid ${C.border}`, marginBottom:2 }}>
+            <span style={{ color:C.sub }}><IcoSearch /></span>
+            <input value={historySearch} onChange={e => setHistorySearch(e.target.value)} placeholder="搜尋叫貨編號…"
+              style={{ border:"none", outline:"none", fontSize:15, flex:1, color:C.text, background:"transparent", fontFamily:"inherit" }} />
+            {historySearch && <button onClick={() => setHistorySearch("")} style={{ background:"none", border:"none", color:C.sub, cursor:"pointer", fontSize:18, lineHeight:1 }}>✕</button>}
+          </div>
           {orders.length === 0 && (
             <div style={{ textAlign:"center", color:C.sub, paddingTop:60 }}>還沒有叫貨紀錄</div>
           )}
-          {orders.map(o => (
+          {orders.length > 0 && orders.filter(o => o.id.includes(historySearch)).length === 0 && (
+            <div style={{ textAlign:"center", color:C.sub, paddingTop:40 }}>找不到符合的叫貨編號</div>
+          )}
+          {orders.filter(o => o.id.includes(historySearch)).map(o => (
             <div key={o.id + o.time} style={{ background:C.rowA, borderRadius:14, overflow:"hidden", border:`1px solid ${C.border}` }}>
               <div onClick={() => setShowOrderDetail(showOrderDetail === (o.id+o.time) ? null : (o.id+o.time))}
                 style={{ padding:"13px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
@@ -540,18 +1343,27 @@ function App() {
                   }} style={{ marginTop:10, background:C.light, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, color:C.sub, cursor:"pointer", display:"flex", alignItems:"center", gap:5, fontFamily:"inherit" }}>
                     <IcoCopy /> 複製此單
                   </button>
+                  <div style={{ display:"flex", gap:8, marginTop:8 }}>
+                    <button onClick={() => handleOpenEditOrder(o)} style={{ flex:1, background:C.light, border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, color:C.primary, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, fontFamily:"inherit" }}>
+                      <IcoEdit /> 編輯內容
+                    </button>
+                    {isAdmin && (
+                      <button onClick={() => setOrderToDelete(o)} style={{ flex:1, background:"#FEF2F2", border:"none", borderRadius:8, padding:"7px 14px", fontSize:13, color:C.danger, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:5, fontFamily:"inherit" }}>
+                        <IcoTrash /> 刪除訂單
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
           ))}
         </div>
       )}
-
+ 
       {/* ══════════════ MANAGE TAB ══════════════ */}
       {tab === "manage" && (
         <div style={{ padding:"14px 16px 90px" }}>
-
-          {/* Zone list view */}
+ 
           {manageView === "zones" && (
             <>
               <button onClick={() => setShowAddZone(true)}
@@ -572,8 +1384,10 @@ function App() {
                         <div style={{ display:"flex", gap:6, flexShrink:0 }}>
                           <button onClick={() => { setZoneForm({ name: z.name }); setEditZone(z); }}
                             style={{ background:C.light, border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.primary, display:"flex" }}><IcoEdit /></button>
-                          <button onClick={() => setDeleteZone(z)}
-                            style={{ background:"#FEF2F2", border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.danger, display:"flex" }}><IcoTrash /></button>
+                          {isAdmin && (
+                            <button onClick={() => setDeleteZone(z)}
+                              style={{ background:"#FEF2F2", border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.danger, display:"flex" }}><IcoTrash /></button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -582,8 +1396,7 @@ function App() {
               </div>
             </>
           )}
-
-          {/* Product list within zone */}
+ 
           {manageView === "products" && (
             <>
               <button onClick={openAdd}
@@ -592,65 +1405,88 @@ function App() {
               </button>
               {longPressId && (
                 <div style={{ background:"#fff8e8", border:`1px solid ${C.accent}`, borderRadius:10, padding:"8px 14px", marginBottom:10, fontSize:13, color:C.accent, textAlign:"center" }}>
-                  長按模式：拖曳或使用 ↑↓ 調整順序
+                  長按模式：使用 ↑↓ 調整順序
                   <button onClick={() => setLongPressId(null)} style={{ marginLeft:10, background:"none", border:"none", color:C.sub, cursor:"pointer", fontSize:13 }}>完成</button>
                 </div>
               )}
               <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                {zoneProducts.map((p, idx) => {
-                  const isLong = longPressId === p.id || longPressId !== null;
-                  return (
-                    <div key={p.id}
-                      draggable={longPressId !== null}
-                      onDragStart={() => handleDragStart(p.id)}
-                      onDragOver={e => handleDragOver(e, p.id)}
-                      onDragEnd={handleDragEnd}
-                      onTouchStart={() => handleTouchStart(p.id)}
-                      onTouchEnd={handleTouchEnd}
-                      onContextMenu={e => { e.preventDefault(); setLongPressId(p.id); }}
-                      style={{ background: idx % 2 === 0 ? C.rowA : C.rowB, borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", border:`1px solid ${longPressId !== null && dragId === p.id ? C.primary : C.border}`, transition:"all 0.15s", cursor: longPressId !== null ? "grab" : "default", opacity: dragId === p.id ? 0.5 : 1 }}>
-                      {longPressId !== null && (
-                        <span style={{ color:C.sub, marginRight:8, display:"flex", flexShrink:0 }}><IcoDrag /></span>
-                      )}
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontWeight:600, fontSize:15, color:C.text }}>{p.name}</div>
-                        <div style={{ fontSize:12, color:C.sub, marginTop:2 }}>
-                          單位：{p.unit || "—"}
-                          {p.note ? <span style={{ marginLeft:8, color:C.accent }}>📌 {p.note}</span> : null}
-                        </div>
-                      </div>
-                      <div style={{ display:"flex", gap:5, flexShrink:0, alignItems:"center" }}>
-                        {longPressId !== null ? (
-                          <>
-                            <button onClick={() => moveItem(p.id, -1)} disabled={idx === 0}
-                              style={{ background: idx === 0 ? C.border : C.light, border:"none", borderRadius:8, padding:"6px 8px", cursor: idx === 0 ? "default" : "pointer", color: idx === 0 ? C.light : C.primary, display:"flex", opacity: idx === 0 ? 0.4 : 1 }}><IcoUp /></button>
-                            <button onClick={() => moveItem(p.id, 1)} disabled={idx === zoneProducts.length - 1}
-                              style={{ background: idx === zoneProducts.length-1 ? C.border : C.light, border:"none", borderRadius:8, padding:"6px 8px", cursor: idx === zoneProducts.length-1 ? "default" : "pointer", color: idx === zoneProducts.length-1 ? C.light : C.primary, display:"flex", opacity: idx === zoneProducts.length-1 ? 0.4 : 1 }}><IcoDown /></button>
-                          </>
-                        ) : (
-                          <>
-                            <button onClick={() => openEdit(p)} style={{ background:C.light, border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.primary, display:"flex" }}><IcoEdit /></button>
-                            <button onClick={() => setDeleteItem(p)} style={{ background:"#FEF2F2", border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.danger, display:"flex" }}><IcoTrash /></button>
-                          </>
-                        )}
+                {zoneProducts.map((p, idx) => (
+                  <div key={p.id}
+                    onTouchStart={() => handleTouchStart(p.id)}
+                    onTouchEnd={handleTouchEnd}
+                    onContextMenu={e => { e.preventDefault(); setLongPressId(p.id); }}
+                    style={{ background: idx % 2 === 0 ? C.rowA : C.rowB, borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", border:`1px solid ${C.border}`, transition:"all 0.15s" }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontWeight:600, fontSize:15, color:C.text }}>{p.name}</div>
+                      <div style={{ fontSize:12, color:C.sub, marginTop:2 }}>
+                        單位：{p.unit || "—"}
+                        {p.note ? <span style={{ marginLeft:8, color:C.accent }}>📌 {p.note}</span> : null}
                       </div>
                     </div>
-                  );
-                })}
+                    <div style={{ display:"flex", gap:5, flexShrink:0, alignItems:"center" }}>
+                      {longPressId !== null ? (
+                        <>
+                          <button onClick={() => moveItem(p.id, -1)} disabled={idx === 0}
+                            style={{ background: idx === 0 ? C.border : C.light, border:"none", borderRadius:8, padding:"6px 8px", cursor: idx === 0 ? "default" : "pointer", color: idx === 0 ? C.light : C.primary, display:"flex", opacity: idx === 0 ? 0.4 : 1 }}><IcoUp /></button>
+                          <button onClick={() => moveItem(p.id, 1)} disabled={idx === zoneProducts.length - 1}
+                            style={{ background: idx === zoneProducts.length-1 ? C.border : C.light, border:"none", borderRadius:8, padding:"6px 8px", cursor: idx === zoneProducts.length-1 ? "default" : "pointer", color: idx === zoneProducts.length-1 ? C.light : C.primary, display:"flex", opacity: idx === zoneProducts.length-1 ? 0.4 : 1 }}><IcoDown /></button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => openEdit(p)} style={{ background:C.light, border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.primary, display:"flex" }}><IcoEdit /></button>
+                          {isAdmin && (
+                            <button onClick={() => setDeleteItem(p)} style={{ background:"#FEF2F2", border:"none", borderRadius:8, padding:"7px 10px", cursor:"pointer", color:C.danger, display:"flex" }}><IcoTrash /></button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
               {zoneProducts.length === 0 && (
                 <div style={{ textAlign:"center", color:C.sub, paddingTop:40 }}>此區域尚無品項</div>
               )}
               {zoneProducts.length > 0 && longPressId === null && (
-                <div style={{ textAlign:"center", color:C.sub, fontSize:12, marginTop:16 }}>
-                  長按品項可調整順序
-                </div>
+                <div style={{ textAlign:"center", color:C.sub, fontSize:12, marginTop:16 }}>長按品項可調整順序</div>
               )}
             </>
           )}
         </div>
       )}
-
+ 
+      {/* ══════════════ SUMMARY TAB（管理員：當月跨分院加總）══════════════ */}
+      {tab === "summary" && isAdmin && (
+        <div style={{ padding:"14px 16px 110px" }}>
+          <div style={{ fontWeight:700, fontSize:16, color:C.text, marginBottom:4 }}>{currentMonthLabel}叫貨總覽</div>
+          <div style={{ fontSize:12, color:C.sub, marginBottom:14 }}>所有分院本月叫貨品項加總，點品項可看分院明細</div>
+ 
+          {monthlySummary.length === 0 && (
+            <div style={{ textAlign:"center", color:C.sub, paddingTop:60 }}>本月還沒有任何分院叫貨</div>
+          )}
+ 
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {monthlySummary.map((item, idx) => (
+              <div key={item.name} onClick={() => setSummaryDetail(item)}
+                style={{ background: idx % 2 === 0 ? C.rowA : C.rowB, borderRadius:12, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", border:`1px solid ${C.border}`, cursor:"pointer" }}>
+                <div style={{ fontWeight:600, fontSize:15, color:C.text }}>{item.name}</div>
+                <div style={{ fontWeight:700, fontSize:15, color:C.primary }}>{item.qty} {item.unit}</div>
+              </div>
+            ))}
+          </div>
+ 
+          {monthlySummary.length > 0 && (
+            <div style={{ position:"fixed", bottom:66, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, padding:"10px 16px", background:`linear-gradient(to top, ${C.bg} 60%, transparent)` }}>
+              <button onClick={() => {
+                copyTextToClipboard(monthlySummaryText);
+                setToast(`已複製${currentMonthLabel}叫貨總覽！`);
+              }} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+                <IcoCopy /> 複製{currentMonthLabel}叫貨所有品項
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+ 
       {/* ── TAB BAR ── */}
       <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, background:"#e8e0d6", borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100 }}>
         {tabBar.map(t => (
@@ -660,7 +1496,7 @@ function App() {
           </button>
         ))}
       </div>
-
+ 
       {/* ── EXPORT MODAL ── */}
       {showExport && (
         <Modal title="本次叫貨單" onClose={() => setShowExport(false)}>
@@ -672,15 +1508,15 @@ function App() {
               <IcoCopy /> 複製文字
             </button>
           </div>
-          <button onClick={handleSubmitOrder} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
-            <IcoCheck /> 確認送出並儲存紀錄
+          <button onClick={() => { copyTextToClipboard(exportText); handleSubmitOrder(); }} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+            <IcoCheck /> 儲存並複製
           </button>
           <button onClick={() => setShowExport(false)} style={{ width:"100%", marginTop:8, background:"none", border:"none", color:C.sub, fontSize:14, cursor:"pointer", padding:"8px", fontFamily:"inherit" }}>
             返回繼續修改
           </button>
         </Modal>
       )}
-
+ 
       {/* ── ADD PRODUCT MODAL ── */}
       {showAdd && (
         <Modal title="新增品項" onClose={() => setShowAdd(false)}>
@@ -711,7 +1547,7 @@ function App() {
           </div>
         </Modal>
       )}
-
+ 
       {/* ── EDIT PRODUCT MODAL ── */}
       {editItem && (
         <Modal title="編輯品項" onClose={() => setEditItem(null)}>
@@ -742,7 +1578,7 @@ function App() {
           </div>
         </Modal>
       )}
-
+ 
       {/* ── DELETE PRODUCT MODAL ── */}
       {deleteItem && (
         <Modal title="確認刪除" onClose={() => setDeleteItem(null)}>
@@ -757,7 +1593,7 @@ function App() {
           </div>
         </Modal>
       )}
-
+ 
       {/* ── ADD ZONE MODAL ── */}
       {showAddZone && (
         <Modal title="新增區域" onClose={() => setShowAddZone(false)}>
@@ -770,7 +1606,7 @@ function App() {
           </div>
         </Modal>
       )}
-
+ 
       {/* ── EDIT ZONE MODAL ── */}
       {editZone && (
         <Modal title="編輯區域名稱" onClose={() => setEditZone(null)}>
@@ -783,7 +1619,7 @@ function App() {
           </div>
         </Modal>
       )}
-
+ 
       {/* ── DELETE ZONE MODAL ── */}
       {deleteZone && (
         <Modal title="確認刪除區域" onClose={() => setDeleteZone(null)}>
@@ -799,12 +1635,87 @@ function App() {
           </div>
         </Modal>
       )}
-
+ 
+      {/* ── EDIT ORDER MODAL ── */}
+      {orderToEdit && (
+        <Modal title={`編輯訂單內容 - ${orderToEdit.id}`} onClose={() => setOrderToEdit(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+            {editingOrderItems.map((item, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, background:C.bg, borderRadius:10, padding:"10px 12px", border:`1px solid ${C.border}` }}>
+                <div style={{ fontSize:14, color:C.text, flex:1, minWidth:0 }}>{item.name}</div>
+                <div style={{ position:"relative" }}>
+                  <select value={item.qty} onChange={e => handleUpdateOrderItemQty(i, Number(e.target.value))}
+                    style={{ appearance:"none", background:C.primary, color:"#fff", border:"none", borderRadius:10, padding:"7px 28px 7px 14px", fontSize:15, fontWeight:700, cursor:"pointer", outline:"none", fontFamily:"inherit", minWidth:64 }}>
+                    {QTY_OPTIONS.map(n => (
+                      <option key={n} value={n} style={{ background:"#fff", color:C.text }}>{n === 0 ? "移除" : n}</option>
+                    ))}
+                  </select>
+                  <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:"rgba(255,255,255,0.7)", fontSize:10 }}>▼</span>
+                </div>
+                <span style={{ fontSize:12, color:C.sub, minWidth:24, textAlign:"right" }}>{item.unit}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={handleSaveEditOrder} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
+            <IcoCheck /> 儲存修改
+          </button>
+          <button onClick={() => setOrderToEdit(null)} style={{ width:"100%", marginTop:8, background:"none", border:"none", color:C.sub, fontSize:14, cursor:"pointer", padding:"8px", fontFamily:"inherit" }}>
+            取消
+          </button>
+        </Modal>
+      )}
+ 
+      {/* ── DELETE ORDER MODAL ── */}
+      {orderToDelete && (
+        <Modal title="刪除訂單" onClose={() => setOrderToDelete(null)}>
+          <div style={{ textAlign:"center", padding:"8px 0 16px" }}>
+            <div style={{ fontSize:36, marginBottom:10 }}>🗑️</div>
+            <div style={{ fontSize:16, color:C.text, marginBottom:6 }}>確定要刪除訂單</div>
+            <div style={{ fontSize:18, fontWeight:700, color:C.danger, marginBottom:20 }}>「{orderToDelete.id}」？</div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => setOrderToDelete(null)} style={{ flex:1, background:C.light, border:"none", borderRadius:10, padding:"13px", fontSize:15, cursor:"pointer", fontFamily:"inherit", color:C.text, fontWeight:600 }}>取消</button>
+              <button onClick={handleDeleteOrder} style={{ flex:1, background:C.danger, border:"none", borderRadius:10, padding:"13px", fontSize:15, cursor:"pointer", fontFamily:"inherit", color:"#fff", fontWeight:700 }}>刪除</button>
+            </div>
+          </div>
+        </Modal>
+      )}
+ 
+      {/* ── SUMMARY DETAIL MODAL（品項的分院明細）── */}
+      {summaryDetail && (
+        <Modal title={summaryDetail.name} onClose={() => setSummaryDetail(null)}>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {Object.entries(summaryDetail.branches).map(([branchName, q]) => (
+              <div key={branchName} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:C.bg, borderRadius:10, padding:"10px 14px", border:`1px solid ${C.border}` }}>
+                <span style={{ fontSize:14, color:C.text, fontWeight:600 }}>{branchName}</span>
+                <span style={{ fontSize:14, fontWeight:700, color:C.primary }}>{q} {summaryDetail.unit}</span>
+              </div>
+            ))}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", marginTop:4, borderTop:`1px dashed ${C.border}` }}>
+              <span style={{ fontSize:14, color:C.sub, fontWeight:700 }}>合計</span>
+              <span style={{ fontSize:15, fontWeight:800, color:C.primary }}>{summaryDetail.qty} {summaryDetail.unit}</span>
+            </div>
+          </div>
+        </Modal>
+      )}
+ 
+      {/* ── PROFILE / MEMBERS MODAL ── */}
+      {showProfile && (
+        <ProfileModal
+          session={session}
+          isAdmin={isAdmin}
+          myName={myName}
+          myBranch={myBranch}
+          onClose={() => setShowProfile(false)}
+          onUpdated={({ full_name, branch }) => { setMyName(full_name); setMyBranch(branch); }}
+          setToast={setToast}
+        />
+      )}
+ 
       {toast && <Toast msg={toast} onDone={() => setToast("")} />}
     </div>
   );
 }
-
+ 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
   </script>
