@@ -788,6 +788,10 @@ function App() {
   const [search,   setSearch]   = useState("");
   const [historySearch, setHistorySearch] = useState("");
   const [summaryDetail, setSummaryDetail] = useState(null);
+  const [selectedMonths, setSelectedMonths] = useState(() => {
+    const m = new Date().getMonth() + 1;
+    return [m]; // 預設選當月
+  });
   const [tab,      setTab]      = useState("order");
   const [toast,    setToast]    = useState("");
 
@@ -877,7 +881,32 @@ function App() {
         sbGet(SK_ORDERS),
       ]);
 
-      if (cloudProducts) { setProducts(cloudProducts); localSave(SK_PRODUCTS, cloudProducts); }
+      if (cloudProducts) {
+        // 自動修復：同一區域內若有重複的 order 值，重新指派連續整數
+        const fixedProducts = (() => {
+          const byZone = {};
+          cloudProducts.forEach(p => {
+            if (!byZone[p.zone]) byZone[p.zone] = [];
+            byZone[p.zone].push(p);
+          });
+          const result = [];
+          Object.values(byZone).forEach(zProds => {
+            const sorted = [...zProds].sort((a, b) => (a.order || 0) - (b.order || 0) || a.id - b.id);
+            const orders = sorted.map(p => p.order);
+            const hasDupes = new Set(orders).size !== orders.length;
+            if (hasDupes) {
+              sorted.forEach((p, i) => result.push({ ...p, order: i + 1 }));
+            } else {
+              sorted.forEach(p => result.push(p));
+            }
+          });
+          return result;
+        })();
+        const hadFix = JSON.stringify(fixedProducts) !== JSON.stringify(cloudProducts);
+        setProducts(fixedProducts);
+        localSave(SK_PRODUCTS, fixedProducts);
+        if (hadFix) await sbSet(SK_PRODUCTS, fixedProducts); // 順便把修復後的資料存回雲端
+      }
       if (cloudZones)    { setZones(cloudZones);       localSave(SK_ZONES,    cloudZones); }
       if (cloudOrders)   { setOrders(cloudOrders);     localSave(SK_ORDERS,   cloudOrders); }
 
@@ -980,9 +1009,10 @@ function App() {
   const currentMonthLabel = useMemo(() => `${new Date().getMonth() + 1}月`, []);
 
   const monthlySummary = useMemo(() => {
-    const thisMonthOrders = orders.filter(o => o.monthLabel === currentMonthLabel);
-    const map = {}; // name -> { name, unit, qty, branches: { branchName: qty } }
-    thisMonthOrders.forEach(o => {
+    const selectedLabels = selectedMonths.map(m => `${m}月`);
+    const filteredOrders = orders.filter(o => selectedLabels.includes(o.monthLabel));
+    const map = {};
+    filteredOrders.forEach(o => {
       const branchName = o.branch || "內湖";
       o.items.forEach(item => {
         if (!map[item.name]) map[item.name] = { name: item.name, unit: item.unit, qty: 0, branches: {} };
@@ -991,11 +1021,24 @@ function App() {
       });
     });
     return Object.values(map).sort((a, b) => a.name.localeCompare(b.name, "zh-TW"));
-  }, [orders, currentMonthLabel]);
+  }, [orders, selectedMonths]);
+
+  const summaryTitle = useMemo(() => {
+    if (selectedMonths.length === 0) return "（未選月份）";
+    const sorted = [...selectedMonths].sort((a, b) => a - b);
+    // 判斷是否剛好是一個季度
+    const quarters = [[1,2,3],[4,5,6],[7,8,9],[10,11,12]];
+    const qMatch = quarters.find(q =>
+      q.length === sorted.length && q.every((m, i) => m === sorted[i])
+    );
+    if (qMatch) return `第${quarters.indexOf(qMatch)+1}季（${qMatch[0]}～${qMatch[2]}月）`;
+    if (sorted.length === 1) return `${sorted[0]}月`;
+    return sorted.map(m => `${m}月`).join("、");
+  }, [selectedMonths]);
 
   const monthlySummaryText = useMemo(() =>
-    `${currentMonthLabel}叫貨\n` + monthlySummary.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
-    [monthlySummary, currentMonthLabel]
+    `${summaryTitle}叫貨總覽\n` + monthlySummary.map(i => `${i.name} * ${i.qty}${i.unit}`).join("\n"),
+    [monthlySummary, summaryTitle]
   );
 
   // ── Order submit ──────────────────────────────────────────────────────────
@@ -1088,22 +1131,29 @@ function App() {
   }
 
   function moveItem(idx, dir) {
-    // zoneProducts 已經是排好的陣列，直接用傳入的 idx 做交換
-    const zProds = zoneProducts;
     const swapIdx = idx + dir;
-    if (idx < 0 || swapIdx < 0 || swapIdx >= zProds.length) return;
+    if (swapIdx < 0 || swapIdx >= zoneProducts.length) return;
 
-    // 在陣列裡直接交換兩個元素的位置
-    const reordered = [...zProds];
-    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+    const idA = zoneProducts[idx].id;
+    const idB = zoneProducts[swapIdx].id;
 
-    // 重新指派 order 為連續整數（1, 2, 3...）
-    const orderMap = {};
-    reordered.forEach((p, i) => { orderMap[p.id] = i + 1; });
+    // 把整個區域品項的 id 按目前順序記下來
+    const zoneProdIds = zoneProducts.map(p => p.id);
 
-    updateProducts(prev => prev.map(p =>
-      orderMap[p.id] !== undefined ? { ...p, order: orderMap[p.id] } : p
-    ));
+    updateProducts(prev => {
+      // 先把這個區域所有品項都指派連續 order（消除歷史殘留的混亂 order 值）
+      let result = prev.map(p => {
+        const pos = zoneProdIds.findIndex(zid => String(zid) === String(p.id));
+        if (pos === -1) return p;
+        return { ...p, order: pos + 1 };
+      });
+      // 再把 idx 和 swapIdx 兩個品項的 order 互換
+      return result.map(p => {
+        if (String(p.id) === String(idA)) return { ...p, order: swapIdx + 1 };
+        if (String(p.id) === String(idB)) return { ...p, order: idx + 1 };
+        return p;
+      });
+    });
   }
 
   function handleTouchStart(id) {
@@ -1450,14 +1500,60 @@ function App() {
         </div>
       )}
 
-      {/* ══════════════ SUMMARY TAB（管理員：當月跨分院加總）══════════════ */}
+      {/* ══════════════ SUMMARY TAB（管理員：跨分院叫貨加總）══════════════ */}
       {tab === "summary" && isAdmin && (
         <div style={{ padding:"14px 16px 110px" }}>
-          <div style={{ fontWeight:700, fontSize:16, color:C.text, marginBottom:4 }}>{currentMonthLabel}叫貨總覽</div>
-          <div style={{ fontSize:12, color:C.sub, marginBottom:14 }}>所有分院本月叫貨品項加總，點品項可看分院明細</div>
 
-          {monthlySummary.length === 0 && (
-            <div style={{ textAlign:"center", color:C.sub, paddingTop:60 }}>本月還沒有任何分院叫貨</div>
+          {/* 月份選取區 */}
+          <div style={{ background:C.surface, borderRadius:14, padding:"14px", marginBottom:14, border:`1px solid ${C.border}` }}>
+            {/* 季度快速選取 */}
+            <div style={{ fontSize:12, fontWeight:700, color:C.sub, marginBottom:8, letterSpacing:"0.04em" }}>快速選取季度</div>
+            <div style={{ display:"flex", gap:6, marginBottom:12 }}>
+              {[[1,2,3],[4,5,6],[7,8,9],[10,11,12]].map((q, qi) => {
+                const isSelected = q.every(m => selectedMonths.includes(m)) && selectedMonths.length === q.length;
+                return (
+                  <button key={qi} onClick={() => setSelectedMonths(q)}
+                    style={{ flex:1, background: isSelected ? C.primary : C.light, color: isSelected ? "#fff" : C.text, border:"none", borderRadius:10, padding:"8px 0", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                    Q{qi+1}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 月份複選 */}
+            <div style={{ fontSize:12, fontWeight:700, color:C.sub, marginBottom:8, letterSpacing:"0.04em" }}>或自選月份（可複選）</div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:6 }}>
+              {Array.from({length:12}, (_, i) => i + 1).map(m => {
+                const isSelected = selectedMonths.includes(m);
+                const hasData = orders.some(o => o.monthLabel === `${m}月`);
+                return (
+                  <button key={m} onClick={() => {
+                    setSelectedMonths(prev =>
+                      prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m].sort((a,b) => a-b)
+                    );
+                  }}
+                    style={{ background: isSelected ? C.primary : hasData ? "#e8f0e4" : C.bg, color: isSelected ? "#fff" : hasData ? C.addBtn : C.light, border:`1.5px solid ${isSelected ? C.primary : hasData ? C.addBtn : C.border}`, borderRadius:10, padding:"8px 0", fontSize:13, fontWeight: isSelected || hasData ? 700 : 400, cursor:"pointer", fontFamily:"inherit" }}>
+                    {m}月
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize:11, color:C.sub, marginTop:8 }}>綠色框＝有叫貨紀錄的月份</div>
+          </div>
+
+          {/* 結果標題 */}
+          <div style={{ fontWeight:700, fontSize:16, color:C.text, marginBottom:4 }}>
+            {summaryTitle} 叫貨總覽
+          </div>
+          <div style={{ fontSize:12, color:C.sub, marginBottom:14 }}>
+            所有分院指定期間叫貨品項加總，點品項可看分院明細
+          </div>
+
+          {selectedMonths.length === 0 && (
+            <div style={{ textAlign:"center", color:C.sub, paddingTop:40 }}>請先選擇月份</div>
+          )}
+          {selectedMonths.length > 0 && monthlySummary.length === 0 && (
+            <div style={{ textAlign:"center", color:C.sub, paddingTop:40 }}>選取期間內沒有任何叫貨紀錄</div>
           )}
 
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -1470,13 +1566,13 @@ function App() {
             ))}
           </div>
 
-          {monthlySummary.length > 0 && (
+          {selectedMonths.length > 0 && monthlySummary.length > 0 && (
             <div style={{ position:"fixed", bottom:66, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:480, padding:"10px 16px", background:`linear-gradient(to top, ${C.bg} 60%, transparent)` }}>
               <button onClick={() => {
                 copyTextToClipboard(monthlySummaryText);
-                setToast(`已複製${currentMonthLabel}叫貨總覽！`);
+                setToast(`已複製${summaryTitle}叫貨總覽！`);
               }} style={{ ...btnPrimary, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                <IcoCopy /> 複製{currentMonthLabel}叫貨所有品項
+                <IcoCopy /> 複製 {summaryTitle} 所有品項
               </button>
             </div>
           )}
